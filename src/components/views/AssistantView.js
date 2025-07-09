@@ -269,11 +269,11 @@ export class AssistantView extends LitElement {
 
     getProfileNames() {
         return {
-            interview: 'Job Interview',
-            sales: 'Sales Call',
-            meeting: 'Business Meeting',
-            presentation: 'Presentation',
-            negotiation: 'Negotiation',
+            interview: 'Patient Reporting',
+            // sales: 'Sales Call',
+            // meeting: 'Business Meeting',
+            // presentation: 'Presentation',
+            // negotiation: 'Negotiation',
         };
     }
 
@@ -281,7 +281,7 @@ export class AssistantView extends LitElement {
         const profileNames = this.getProfileNames();
         return this.responses.length > 0 && this.currentResponseIndex >= 0
             ? this.responses[this.currentResponseIndex]
-            : `Hey, Im listening to your ${profileNames[this.selectedProfile] || 'session'}?`;
+            : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}?`;
     }
 
     renderMarkdown(content) {
