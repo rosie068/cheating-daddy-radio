@@ -7,6 +7,17 @@ module.exports = {
         extraResource: ['./src/assets/SystemAudioDump'],
         name: 'TriFetch',
         icon: 'src/assets/logo',
+        // Override the default Electron license with our GPL-3.0 license
+        afterCopy: [(buildPath, electronVersion, platform, arch, callback) => {
+            const fs = require('fs');
+            const path = require('path');
+            const projectLicense = path.join(__dirname, 'LICENSE');
+            const buildLicense = path.join(buildPath, 'LICENSE');
+            
+            // Copy the project's GPL-3.0 license to override Electron's license
+            fs.copyFileSync(projectLicense, buildLicense);
+            callback();
+        }],
         // use `security find-identity -v -p codesigning` to find your identity
         // for macos signing
         // also fuck apple
