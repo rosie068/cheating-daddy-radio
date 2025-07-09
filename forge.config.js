@@ -18,27 +18,24 @@ module.exports = {
             fs.copyFileSync(projectLicense, buildLicense);
             callback();
         }],
-        // Code signing for macOS - prevents firewall blocking
-        // Use `security find-identity -v -p codesigning` to find your identity
-        // You need a valid Apple Developer certificate for this to work
-        osxSign: {
-            identity: process.env.APPLE_SIGNING_IDENTITY || 'Developer ID Application',
-            optionsForFile: (filePath) => {
-                return {
-                    entitlements: 'entitlements.plist',
-                    hardenedRuntime: true,
-                    'gatekeeper-assess': false,
-                    'signature-flags': 'library'
-                };
-            },
-        },
-        // App notarization - recommended for distribution
-        // Requires Apple ID with app-specific password
-        osxNotarize: process.env.APPLE_ID ? {
-            appleId: process.env.APPLE_ID,
-            appleIdPassword: process.env.APPLE_ID_PASSWORD,
-            teamId: process.env.APPLE_TEAM_ID,
-        } : undefined,
+        // Code signing disabled for now - users can bypass Gatekeeper by right-clicking and selecting "Open"
+        // To enable code signing, uncomment the sections below and follow CODE_SIGNING_SETUP.md
+        // osxSign: {
+        //     identity: process.env.APPLE_SIGNING_IDENTITY || 'Developer ID Application',
+        //     optionsForFile: (filePath) => {
+        //         return {
+        //             entitlements: 'entitlements.plist',
+        //             hardenedRuntime: true,
+        //             'gatekeeper-assess': false,
+        //             'signature-flags': 'library'
+        //         };
+        //     },
+        // },
+        // osxNotarize: process.env.APPLE_ID ? {
+        //     appleId: process.env.APPLE_ID,
+        //     appleIdPassword: process.env.APPLE_ID_PASSWORD,
+        //     teamId: process.env.APPLE_TEAM_ID,
+        // } : undefined,
     },
     rebuildConfig: {},
     makers: [
