@@ -13,10 +13,21 @@ let mainWindow = null;
 
 function createMainWindow() {
     mainWindow = createWindow(sendToRenderer, geminiSessionRef);
+    
+    // Ensure dock icon is visible on macOS
+    if (process.platform === 'darwin') {
+        app.dock.show();
+    }
+    
     return mainWindow;
 }
 
 app.whenReady().then(() => {
+    // Ensure dock icon is visible on macOS before creating window
+    if (process.platform === 'darwin') {
+        app.dock.show();
+    }
+    
     createMainWindow();
     setupGeminiIpcHandlers(geminiSessionRef);
     setupGeneralIpcHandlers();

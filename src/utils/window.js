@@ -35,7 +35,7 @@ function createWindow(sendToRenderer, geminiSessionRef) {
         frame: false,
         transparent: true,
         hasShadow: false,
-        alwaysOnTop: true,
+        alwaysOnTop: false,        // Changed: Disable alwaysOnTop to prevent utility app behavior
         skipTaskbar: false,        // Changed: Now shows in dock
         hiddenInMissionControl: false, // Changed: Now shows in Mission Control
         webPreferences: {
@@ -54,7 +54,12 @@ function createWindow(sendToRenderer, geminiSessionRef) {
 
     mainWindow.setResizable(false);
     mainWindow.setContentProtection(true);
-    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    
+    // Remove setVisibleOnAllWorkspaces as it can interfere with dock visibility
+    // mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    
+    // Set alwaysOnTop after window creation to avoid utility app classification
+    mainWindow.setAlwaysOnTop(true);
 
     // Center window at the top of the screen
     const primaryDisplay = screen.getPrimaryDisplay();
