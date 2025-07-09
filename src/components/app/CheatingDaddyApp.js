@@ -212,7 +212,9 @@ export class CheatingDaddyApp extends LitElement {
         if (this.currentView === 'customize' || this.currentView === 'help' || this.currentView === 'history') {
             this.currentView = 'main';
         } else if (this.currentView === 'assistant') {
-            cheddar.stopCapture();
+            if (cheddar.isScreenCaptureInitialized) {
+                cheddar.stopCapture(); // Stop screen capture when closing session
+            }
 
             // Close the session
             if (window.require) {
@@ -252,8 +254,8 @@ export class CheatingDaddyApp extends LitElement {
         }
 
         await cheddar.initializeGemini(this.selectedProfile, this.selectedLanguage);
-        // Pass the screenshot interval as string (including 'manual' option)
-        cheddar.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+        // Screen capture will be initialized only when Generate Report is clicked
+        // No automatic screen capture startup to avoid permission popups
         this.responses = [];
         this.currentResponseIndex = -1;
         this.startTime = Date.now();

@@ -405,7 +405,7 @@ export class HelpView extends LitElement {
                             <strong>Click-through Mode:</strong> Use ${this.formatKeybind(this.keybinds.toggleClickThrough)} to make the window
                             click-through
                         </div>
-                        <div class="usage-step"><strong>Get AI Help:</strong> The AI will analyze your screen and audio to provide assistance</div>
+                        <div class="usage-step"><strong>Get AI Help:</strong> The AI will analyze your screen to provide assistance</div>
                         <div class="usage-step"><strong>Text Messages:</strong> Type questions or requests to the AI using the text input</div>
                         <div class="usage-step">
                             <strong>Navigate Responses:</strong> Use ${this.formatKeybind(this.keybinds.previousResponse)} and
@@ -444,9 +444,9 @@ export class HelpView extends LitElement {
 
                 <div class="option-group">
                     <div class="option-label">
-                        <span>Audio Input</span>
+                        <span>Screen Analysis</span>
                     </div>
-                    <div class="description">The AI listens to conversations and provides contextual assistance based on what it hears.</div>
+                    <div class="description">The AI analyzes screen content to provide contextual assistance based on what it sees.</div>
                 </div>
             </div>
         `;

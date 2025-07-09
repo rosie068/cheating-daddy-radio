@@ -556,36 +556,37 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         }
     });
 
-    ipcMain.handle('start-macos-audio', async event => {
-        if (process.platform !== 'darwin') {
-            return {
-                success: false,
-                error: 'macOS audio capture only available on macOS',
-            };
-        }
+    // Audio recording disabled - IPC handlers commented out
+    // ipcMain.handle('start-macos-audio', async event => {
+    //     if (process.platform !== 'darwin') {
+    //         return {
+    //             success: false,
+    //             error: 'macOS audio capture only available on macOS',
+    //         };
+    //     }
 
-        try {
-            const success = await startMacOSAudioCapture(geminiSessionRef);
-            return { success };
-        } catch (error) {
-            console.error('Error starting macOS audio capture:', error);
-            return { success: false, error: error.message };
-        }
-    });
+    //     try {
+    //         const success = await startMacOSAudioCapture(geminiSessionRef);
+    //         return { success };
+    //     } catch (error) {
+    //         console.error('Error starting macOS audio capture:', error);
+    //         return { success: false, error: error.message };
+    //     }
+    // });
 
-    ipcMain.handle('stop-macos-audio', async event => {
-        try {
-            stopMacOSAudioCapture();
-            return { success: true };
-        } catch (error) {
-            console.error('Error stopping macOS audio capture:', error);
-            return { success: false, error: error.message };
-        }
-    });
+    // ipcMain.handle('stop-macos-audio', async event => {
+    //     try {
+    //         stopMacOSAudioCapture();
+    //         return { success: true };
+    //     } catch (error) {
+    //         console.error('Error stopping macOS audio capture:', error);
+    //         return { success: false, error: error.message };
+    //     }
+    // });
 
     ipcMain.handle('close-session', async event => {
         try {
-            stopMacOSAudioCapture();
+            // stopMacOSAudioCapture(); // Audio recording disabled
 
             // Clear session params to prevent reconnection when user closes session
             lastSessionParams = null;

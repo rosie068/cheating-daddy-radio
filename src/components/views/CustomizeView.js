@@ -903,17 +903,17 @@ export class CustomizeView extends LitElement {
                     </div>
                 </div>
 
-                <!-- Language & Audio Section -->
+                <!-- Language Section -->
                 <div class="settings-section">
                     <div class="section-title">
-                        <span>Language & Audio</span>
+                        <span>Language</span>
                     </div>
 
                     <div class="form-grid">
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label">
-                                    Speech Language
+                                    Interface Language
                                     <span class="current-selection">${currentLanguage?.name || 'Unknown'}</span>
                                 </label>
                                 <select class="form-control" .value=${this.selectedLanguage} @change=${this.handleLanguageSelect}>
@@ -925,7 +925,7 @@ export class CustomizeView extends LitElement {
                                         `
                                     )}
                                 </select>
-                                <div class="form-description">Language for speech recognition and AI responses</div>
+                                <div class="form-description">Language for the interface and AI responses</div>
                             </div>
                         </div>
                     </div>
@@ -1022,24 +1022,14 @@ export class CustomizeView extends LitElement {
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label">
-                                    Capture Interval
-                                    <span class="current-selection"
-                                        >${this.selectedScreenshotInterval === 'manual' ? 'Manual' : this.selectedScreenshotInterval + 's'}</span
-                                    >
+                                    Capture Mode
+                                    <span class="current-selection">Manual</span>
                                 </label>
-                                <select class="form-control" .value=${this.selectedScreenshotInterval} @change=${this.handleScreenshotIntervalSelect}>
-                                    <option value="manual" ?selected=${this.selectedScreenshotInterval === 'manual'}>Manual (On demand)</option>
-                                    <option value="1" ?selected=${this.selectedScreenshotInterval === '1'}>Every 1 second</option>
-                                    <option value="2" ?selected=${this.selectedScreenshotInterval === '2'}>Every 2 seconds</option>
-                                    <option value="5" ?selected=${this.selectedScreenshotInterval === '5'}>Every 5 seconds</option>
-                                    <option value="10" ?selected=${this.selectedScreenshotInterval === '10'}>Every 10 seconds</option>
+                                <select class="form-control" .value=${'manual'} @change=${this.handleScreenshotIntervalSelect} disabled>
+                                    <option value="manual" selected>Manual (On demand)</option>
                                 </select>
                                 <div class="form-description">
-                                    ${
-                                        this.selectedScreenshotInterval === 'manual'
-                                            ? 'Screenshots will only be taken when you use the "Ask Next Step" shortcut'
-                                            : 'Automatic screenshots will be taken at the specified interval'
-                                    }
+                                    Screenshots will only be taken when you click the "Generate Report" button
                                 </div>
                             </div>
 
