@@ -228,29 +228,29 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
         }
     }
 
-    // Register next step shortcut (either starts session or takes screenshot based on view)
-    if (keybinds.nextStep) {
-        try {
-            globalShortcut.register(keybinds.nextStep, async () => {
-                console.log('Next step shortcut triggered');
-                try {
-                    // Determine the shortcut key format
-                    const isMac = process.platform === 'darwin';
-                    const shortcutKey = isMac ? 'cmd+enter' : 'ctrl+enter';
+    // Next step shortcut disabled - use Generate Report button instead
+    // if (keybinds.nextStep) {
+    //     try {
+    //         globalShortcut.register(keybinds.nextStep, async () => {
+    //             console.log('Next step shortcut triggered');
+    //             try {
+    //                 // Determine the shortcut key format
+    //                 const isMac = process.platform === 'darwin';
+    //                 const shortcutKey = isMac ? 'cmd+enter' : 'ctrl+enter';
 
-                    // Use the new handleShortcut function
-                    mainWindow.webContents.executeJavaScript(`
-                        cheddar.handleShortcut('${shortcutKey}');
-                    `);
-                } catch (error) {
-                    console.error('Error handling next step shortcut:', error);
-                }
-            });
-            console.log(`Registered nextStep: ${keybinds.nextStep}`);
-        } catch (error) {
-            console.error(`Failed to register nextStep (${keybinds.nextStep}):`, error);
-        }
-    }
+    //                 // Use the new handleShortcut function
+    //                 mainWindow.webContents.executeJavaScript(`
+    //                     cheddar.handleShortcut('${shortcutKey}');
+    //                 `);
+    //             } catch (error) {
+    //                 console.error('Error handling next step shortcut:', error);
+    //             }
+    //         });
+    //         console.log(`Registered nextStep: ${keybinds.nextStep}`);
+    //     } catch (error) {
+    //         console.error(`Failed to register nextStep (${keybinds.nextStep}):`, error);
+    //     }
+    // }
 
     // Register previous response shortcut
     if (keybinds.previousResponse) {

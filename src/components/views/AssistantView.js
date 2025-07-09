@@ -182,6 +182,13 @@ export class AssistantView extends LitElement {
             gap: 10px;
             margin-top: 10px;
             align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
 
         .text-input-container input {
@@ -215,6 +222,48 @@ export class AssistantView extends LitElement {
 
         .text-input-container button:hover {
             background: var(--text-input-button-hover);
+        }
+
+        .generate-report-button {
+            background: var(--start-button-background);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .generate-report-button:hover {
+            background: var(--start-button-background-hover);
+        }
+
+        .generate-report-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .export-report-button {
+            background: var(--button-background);
+            color: var(--text-color);
+            border: 1px solid var(--button-border);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .export-report-button:hover {
+            background: var(--hover-background);
+        }
+
+        .export-report-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .nav-button {
@@ -426,6 +475,76 @@ export class AssistantView extends LitElement {
         }
     }
 
+    async handleGenerateReport() {
+        // Initialize screen capture and generate report
+        try {
+            // First, initialize screen capture if not already done
+            if (!window.cheddar.isScreenCaptureInitialized) {
+                console.log('Initializing screen capture...');
+                await window.cheddar.startCapture('manual', 'high');
+            }
+            
+            // Use the existing manual screenshot function
+            if (window.captureManualScreenshot) {
+                console.log('Capturing screen for report generation...');
+                await window.captureManualScreenshot('high');
+                console.log('Screen captured and sent to API for analysis');
+            } else if (window.cheddar && window.cheddar.captureScreenshot) {
+                console.log('Using cheddar.captureScreenshot...');
+                await window.cheddar.captureScreenshot('high', true);
+                console.log('Screen captured and sent to API for analysis');
+            } else {
+                console.warn('Screen capture function not available');
+                console.log('Available functions:', {
+                    captureManualScreenshot: typeof window.captureManualScreenshot,
+                    cheddar: Object.keys(window.cheddar || {})
+                });
+            }
+        } catch (error) {
+            console.error('Error generating report:', error);
+            // If permission denied, show user-friendly message
+            if (error.name === 'NotAllowedError') {
+                console.log('Screen recording permission denied by user');
+            }
+        }
+    }
+
+    async handleExportReport() {
+        const currentResponse = this.getCurrentResponse();
+        
+        if (!currentResponse || currentResponse.length === 0) {
+            console.warn('No content to export');
+            return;
+        }
+
+        // Create a clean text version by removing HTML tags if present
+        const cleanText = currentResponse.replace(/<[^>]*>/g, '');
+        
+        // Generate timestamp for filename
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `report_${timestamp}.txt`;
+
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            try {
+                const result = await ipcRenderer.invoke('save-report', {
+                    filename: filename,
+                    content: cleanText
+                });
+                
+                if (result.success) {
+                    console.log('Report exported successfully:', result.path);
+                } else {
+                    console.error('Failed to export report:', result.error);
+                }
+            } catch (error) {
+                console.error('Error exporting report:', error);
+            }
+        } else {
+            console.warn('Electron IPC not available');
+        }
+    }
+
     handleTextKeydown(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -493,6 +612,16 @@ export class AssistantView extends LitElement {
                 ${this.responses.length > 0 ? html` <span class="response-counter">${responseCounter}</span> ` : ''}
 
                 <input type="text" id="textInput" placeholder="Type a message to the AI..." @keydown=${this.handleTextKeydown} />
+
+                <div class="button-group">
+                    <button class="generate-report-button" @click=${this.handleGenerateReport}>
+                        Generate Report
+                    </button>
+
+                    <button class="export-report-button" @click=${this.handleExportReport} ?disabled=${this.responses.length === 0}>
+                        Export Report
+                    </button>
+                </div>
 
                 <button class="nav-button" @click=${this.navigateToNextResponse} ?disabled=${this.currentResponseIndex >= this.responses.length - 1}>
                     <?xml version="1.0" encoding="UTF-8"?><svg

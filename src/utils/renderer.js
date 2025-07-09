@@ -7,6 +7,7 @@ let audioContext = null;
 let audioProcessor = null;
 let micAudioProcessor = null;
 let audioBuffer = [];
+let isScreenCaptureInitialized = false;
 const SAMPLE_RATE = 24000;
 const AUDIO_CHUNK_DURATION = 0.1; // seconds
 const BUFFER_SIZE = 4096; // Increased buffer size for smoother audio
@@ -171,14 +172,14 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
 
     try {
         if (isMacOS) {
-            // On macOS, use SystemAudioDump for audio and getDisplayMedia for screen
-            console.log('Starting macOS capture with SystemAudioDump...');
+            // On macOS, screen capture only - audio recording disabled
+            console.log('Starting macOS capture (screen only, audio disabled)...');
 
-            // Start macOS audio capture
-            const audioResult = await ipcRenderer.invoke('start-macos-audio');
-            if (!audioResult.success) {
-                throw new Error('Failed to start macOS audio capture: ' + audioResult.error);
-            }
+            // Audio recording disabled
+            // const audioResult = await ipcRenderer.invoke('start-macos-audio');
+            // if (!audioResult.success) {
+            //     throw new Error('Failed to start macOS audio capture: ' + audioResult.error);
+            // }
 
             // Get screen capture for screenshots
             mediaStream = await navigator.mediaDevices.getDisplayMedia({
@@ -190,9 +191,9 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
                 audio: false, // Don't use browser audio on macOS
             });
 
-            console.log('macOS screen capture started - audio handled by SystemAudioDump');
+            console.log('macOS screen capture started (audio disabled)');
         } else if (isLinux) {
-            // Linux - use display media for screen capture and getUserMedia for microphone
+            // Linux - screen capture only, audio recording disabled
             mediaStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     frameRate: 1,
@@ -202,51 +203,45 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
                 audio: false, // Don't use system audio loopback on Linux
             });
 
-            // Get microphone input for Linux
-            let micStream = null;
-            try {
-                micStream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        sampleRate: SAMPLE_RATE,
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                    },
-                    video: false,
-                });
+            // Audio recording disabled - no microphone capture
+            // let micStream = null;
+            // try {
+            //     micStream = await navigator.mediaDevices.getUserMedia({
+            //         audio: {
+            //             sampleRate: SAMPLE_RATE,
+            //             channelCount: 1,
+            //             echoCancellation: true,
+            //             noiseSuppression: true,
+            //             autoGainControl: true,
+            //         },
+            //         video: false,
+            //     });
+            //
+            //     console.log('Linux microphone capture started');
+            //
+            //     // Setup audio processing for microphone on Linux
+            //     setupLinuxMicProcessing(micStream);
+            // } catch (micError) {
+            //     console.warn('Failed to get microphone access on Linux:', micError);
+            //     // Continue without microphone if permission denied
+            // }
 
-                console.log('Linux microphone capture started');
-
-                // Setup audio processing for microphone on Linux
-                setupLinuxMicProcessing(micStream);
-            } catch (micError) {
-                console.warn('Failed to get microphone access on Linux:', micError);
-                // Continue without microphone if permission denied
-            }
-
-            console.log('Linux screen capture started');
+            console.log('Linux screen capture started (audio disabled)');
         } else {
-            // Windows - use display media with loopback for system audio
+            // Windows - screen capture only, audio recording disabled
             mediaStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
                     frameRate: 1,
                     width: { ideal: 1920 },
                     height: { ideal: 1080 },
                 },
-                audio: {
-                    sampleRate: SAMPLE_RATE,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                },
+                audio: false, // Audio recording disabled
             });
 
-            console.log('Windows capture started with loopback audio');
+            console.log('Windows capture started (audio disabled)');
 
-            // Setup audio processing for Windows loopback audio only
-            setupWindowsLoopbackProcessing();
+            // Audio processing disabled
+            // setupWindowsLoopbackProcessing();
         }
 
         console.log('MediaStream obtained:', {
@@ -255,17 +250,10 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
             videoTrack: mediaStream.getVideoTracks()[0]?.getSettings(),
         });
 
-        // Start capturing screenshots - check if manual mode
-        if (screenshotIntervalSeconds === 'manual' || screenshotIntervalSeconds === 'Manual') {
-            console.log('Manual mode enabled - screenshots will be captured on demand only');
-            // Don't start automatic capture in manual mode
-        } else {
-            const intervalMilliseconds = parseInt(screenshotIntervalSeconds) * 1000;
-            screenshotInterval = setInterval(() => captureScreenshot(imageQuality), intervalMilliseconds);
-
-            // Capture first screenshot immediately
-            setTimeout(() => captureScreenshot(imageQuality), 100);
-        }
+        // Manual mode only - no automatic screenshots
+        console.log('Manual mode enabled - screenshots will be captured on demand only via Generate Report button');
+        // Automatic screenshot intervals disabled
+        isScreenCaptureInitialized = true;
     } catch (err) {
         console.error('Error starting capture:', err);
                             cheddar.setStatus('error');
@@ -337,7 +325,10 @@ function setupWindowsLoopbackProcessing() {
 
 async function captureScreenshot(imageQuality = 'medium', isManual = false) {
     console.log(`Capturing ${isManual ? 'manual' : 'automated'} screenshot...`);
-    if (!mediaStream) return;
+    if (!mediaStream) {
+        console.error('No mediaStream available for screenshot. Make sure startCapture was called.');
+        return;
+    }
 
     // Check rate limiting for automated screenshots only
     if (!isManual && tokenTracker.shouldThrottle()) {
@@ -439,13 +430,15 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
 async function captureManualScreenshot(imageQuality = null) {
     console.log('Manual screenshot triggered');
     const quality = imageQuality || currentImageQuality;
+    
+    // Only capture screenshot, don't send automatic text message
     await captureScreenshot(quality, true); // Pass true for isManual
-    await new Promise(resolve => setTimeout(resolve, 2000)); // TODO shitty hack
-    await sendTextMessage(`Help me on this page, give me the answer no bs, complete answer.
-        So if its a code question, give me the approach in few bullet points, then the entire code. Also if theres anything else i need to know, tell me.
-        If its a question about the website, give me the answer no bs, complete answer.
-        If its a mcq question, give me the answer no bs, complete answer.
-        `);
+    
+    // Wait a moment for the screenshot to be processed
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Send a focused message for report generation
+    await sendTextMessage(`Please analyze the current screen and generate a comprehensive report based on what you see. Provide clear, actionable insights and recommendations.`);
 }
 
 // Expose functions to global scope for external access
@@ -472,11 +465,13 @@ function stopCapture() {
         mediaStream = null;
     }
 
-    // Stop macOS audio capture if running
+    isScreenCaptureInitialized = false;
+
+    // Stop macOS audio capture if running (disabled)
     if (isMacOS) {
-        ipcRenderer.invoke('stop-macos-audio').catch(err => {
-            console.error('Error stopping macOS audio:', err);
-        });
+        // ipcRenderer.invoke('stop-macos-audio').catch(err => {
+        //     console.error('Error stopping macOS audio:', err);
+        // });
     }
 
     // Clean up hidden elements
@@ -613,7 +608,8 @@ function handleShortcut(shortcutKey) {
         if (currentView === 'main') {
             cheddar.element().handleStart();
         } else {
-            captureManualScreenshot();
+            // Shortcut disabled - use Generate Report button instead
+            console.log('Manual screenshot shortcut disabled. Use Generate Report button instead.');
         }
     }
 }
@@ -641,6 +637,7 @@ const cheddar = {
     stopCapture,
     sendTextMessage,
     handleShortcut,
+    captureScreenshot,
     
     // Conversation history functions
     getAllConversationSessions,
@@ -656,6 +653,11 @@ const cheddar = {
     // Platform detection
     isLinux: isLinux,
     isMacOS: isMacOS,
+    
+    // Screen capture status
+    get isScreenCaptureInitialized() {
+        return isScreenCaptureInitialized;
+    },
 };
 
 // Make it globally available

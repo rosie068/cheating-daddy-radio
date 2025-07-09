@@ -207,8 +207,7 @@ export class AppHeader extends LitElement {
                 <div class="header-actions">
                     ${this.currentView === 'assistant'
                         ? html`
-                              <span>${elapsedTime}</span>
-                              <span>${this.statusText}</span>
+                              <!-- Time counter and status removed -->
                           `
                         : ''}
                     ${this.currentView === 'main'

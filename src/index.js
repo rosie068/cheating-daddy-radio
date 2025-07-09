@@ -2,7 +2,9 @@ if (require('electron-squirrel-startup')) {
     process.exit(0);
 }
 
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const fs = require('fs');
+const path = require('path');
 const { createWindow, updateGlobalShortcuts } = require('./utils/window');
 const { setupGeminiIpcHandlers, stopMacOSAudioCapture, sendToRenderer } = require('./utils/gemini');
 
@@ -78,6 +80,29 @@ function setupGeneralIpcHandlers() {
             return { success: true };
         } catch (error) {
             console.error('Error updating content protection:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('save-report', async (event, { filename, content }) => {
+        try {
+            const { filePath } = await dialog.showSaveDialog(mainWindow, {
+                title: 'Save Report',
+                defaultPath: filename,
+                filters: [
+                    { name: 'Text Files', extensions: ['txt'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ]
+            });
+
+            if (filePath) {
+                fs.writeFileSync(filePath, content, 'utf8');
+                return { success: true, path: filePath };
+            } else {
+                return { success: false, error: 'Save cancelled' };
+            }
+        } catch (error) {
+            console.error('Error saving report:', error);
             return { success: false, error: error.message };
         }
     });
