@@ -1,4 +1,4 @@
-# Cheating Daddy Extension: Radio Version
+# TriFetch: Radio Version
 
 > [!NOTE]  
 > Use latest MacOS and Windows version, older versions have limited support
