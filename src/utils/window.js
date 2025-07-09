@@ -36,8 +36,8 @@ function createWindow(sendToRenderer, geminiSessionRef) {
         transparent: true,
         hasShadow: false,
         alwaysOnTop: true,
-        skipTaskbar: true,
-        hiddenInMissionControl: true,
+        skipTaskbar: false,        // Changed: Now shows in dock
+        hiddenInMissionControl: false, // Changed: Now shows in Mission Control
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false, // TODO: change to true
