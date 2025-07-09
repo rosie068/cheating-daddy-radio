@@ -2,7 +2,7 @@ import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
 import { AppHeader } from './AppHeader.js';
 import { MainView } from '../views/MainView.js';
 import { CustomizeView } from '../views/CustomizeView.js';
-import { HelpView } from '../views/HelpView.js';
+
 import { HistoryView } from '../views/HistoryView.js';
 import { AssistantView } from '../views/AssistantView.js';
 import { OnboardingView } from '../views/OnboardingView.js';
@@ -193,10 +193,7 @@ export class TriFetchApp extends LitElement {
         this.requestUpdate();
     }
 
-    handleHelpClick() {
-        this.currentView = 'help';
-        this.requestUpdate();
-    }
+
 
     handleHistoryClick() {
         this.currentView = 'history';
@@ -297,13 +294,7 @@ export class TriFetchApp extends LitElement {
         this.requestUpdate();
     }
 
-    // Help view event handlers
-    async handleExternalLinkClick(url) {
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            await ipcRenderer.invoke('open-external', url);
-        }
-    }
+
 
     // Assistant view event handlers
     async handleSendText(message) {
@@ -402,8 +393,7 @@ export class TriFetchApp extends LitElement {
                     ></customize-view>
                 `;
 
-            case 'help':
-                return html` <help-view .onExternalLinkClick=${url => this.handleExternalLinkClick(url)}></help-view> `;
+
 
             case 'history':
                 return html` <history-view></history-view> `;
@@ -441,7 +431,7 @@ export class TriFetchApp extends LitElement {
                         .startTime=${this.startTime}
                         .advancedMode=${this.advancedMode}
                         .onCustomizeClick=${() => this.handleCustomizeClick()}
-                        .onHelpClick=${() => this.handleHelpClick()}
+
                         .onHistoryClick=${() => this.handleHistoryClick()}
                         .onAdvancedClick=${() => this.handleAdvancedClick()}
                         .onCloseClick=${() => this.handleClose()}

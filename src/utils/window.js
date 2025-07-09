@@ -454,10 +454,7 @@ function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
                     targetWidth = baseWidth;
                     targetHeight = layoutMode === 'compact' ? 500 : 600;
                     break;
-                case 'help':
-                    targetWidth = baseWidth;
-                    targetHeight = layoutMode === 'compact' ? 450 : 550;
-                    break;
+
                 case 'history':
                     targetWidth = baseWidth;
                     targetHeight = layoutMode === 'compact' ? 450 : 550;

@@ -859,49 +859,7 @@ export class CustomizeView extends LitElement {
 
         return html`
             <div class="settings-container">
-                <!-- Profile & Behavior Section -->
-                <div class="settings-section">
-                    <div class="section-title">
-                        <span>AI Profile & Behavior</span>
-                    </div>
 
-                    <div class="form-grid">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">
-                                    Profile Type
-                                    <span class="current-selection">${currentProfile?.name || 'Unknown'}</span>
-                                </label>
-                                <select class="form-control" .value=${this.selectedProfile} @change=${this.handleProfileSelect}>
-                                    ${profiles.map(
-                                        profile => html`
-                                            <option value=${profile.value} ?selected=${this.selectedProfile === profile.value}>
-                                                ${profile.name}
-                                            </option>
-                                        `
-                                    )}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group full-width">
-                            <label class="form-label">Custom AI Instructions</label>
-                            <textarea
-                                class="form-control"
-                                placeholder="Add specific instructions for how you want the AI to behave during ${
-                                    profileNames[this.selectedProfile] || 'this interaction'
-                                }..."
-                                .value=${localStorage.getItem('customPrompt') || ''}
-                                rows="4"
-                                @input=${this.handleCustomPromptInput}
-                            ></textarea>
-                            <div class="form-description">
-                                Personalize the AI's behavior with specific instructions that will be added to the
-                                ${profileNames[this.selectedProfile] || 'selected profile'} base prompts
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Language Section -->
                 <div class="settings-section">
