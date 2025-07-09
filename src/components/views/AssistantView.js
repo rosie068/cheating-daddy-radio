@@ -217,6 +217,27 @@ export class AssistantView extends LitElement {
             background: var(--text-input-button-hover);
         }
 
+        .generate-report-button {
+            background: var(--start-button-background);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .generate-report-button:hover {
+            background: var(--start-button-background-hover);
+        }
+
+        .generate-report-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .nav-button {
             background: transparent;
             color: white;
@@ -426,6 +447,42 @@ export class AssistantView extends LitElement {
         }
     }
 
+    async handleGenerateReport() {
+        const currentResponse = this.getCurrentResponse();
+        
+        if (!currentResponse || currentResponse.length === 0) {
+            console.warn('No content to export');
+            return;
+        }
+
+        // Create a clean text version by removing HTML tags if present
+        const cleanText = currentResponse.replace(/<[^>]*>/g, '');
+        
+        // Generate timestamp for filename
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `report_${timestamp}.txt`;
+
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            try {
+                const result = await ipcRenderer.invoke('save-report', {
+                    filename: filename,
+                    content: cleanText
+                });
+                
+                if (result.success) {
+                    console.log('Report saved successfully:', result.path);
+                } else {
+                    console.error('Failed to save report:', result.error);
+                }
+            } catch (error) {
+                console.error('Error saving report:', error);
+            }
+        } else {
+            console.warn('Electron IPC not available');
+        }
+    }
+
     handleTextKeydown(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -493,6 +550,10 @@ export class AssistantView extends LitElement {
                 ${this.responses.length > 0 ? html` <span class="response-counter">${responseCounter}</span> ` : ''}
 
                 <input type="text" id="textInput" placeholder="Type a message to the AI..." @keydown=${this.handleTextKeydown} />
+
+                <button class="generate-report-button" @click=${this.handleGenerateReport} ?disabled=${this.responses.length === 0}>
+                    Generate Report
+                </button>
 
                 <button class="nav-button" @click=${this.navigateToNextResponse} ?disabled=${this.currentResponseIndex >= this.responses.length - 1}>
                     <?xml version="1.0" encoding="UTF-8"?><svg
