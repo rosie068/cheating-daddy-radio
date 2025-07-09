@@ -1,5 +1,3 @@
-<img src="/src/assets/logo.png" alt="uwu" width="200"/>
-
 # Cheating Daddy
 
 > [!NOTE]  
