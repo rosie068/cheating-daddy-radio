@@ -49,15 +49,8 @@ function createWindow(sendToRenderer, geminiSessionRef) {
         backgroundColor: '#00000000',
     });
 
-    const { session, desktopCapturer } = require('electron');
-    session.defaultSession.setDisplayMediaRequestHandler(
-        (request, callback) => {
-            desktopCapturer.getSources({ types: ['screen'] }).then(sources => {
-                callback({ video: sources[0], audio: 'loopback' });
-            });
-        },
-        { useSystemPicker: true }
-    );
+    // Remove display media handler to allow browser native permission dialogs
+    // This ensures proper macOS system permission dialogs appear
 
     mainWindow.setResizable(false);
     mainWindow.setContentProtection(true);

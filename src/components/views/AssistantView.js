@@ -478,10 +478,58 @@ export class AssistantView extends LitElement {
     async handleGenerateReport() {
         // Initialize screen capture and generate report
         try {
-            // First, initialize screen capture if not already done
+            // First, reset screen capture to ensure correct source selection
+            console.log('🔄 Forcing screen capture reset to fix source selection...');
+            if (window.cheddar.resetScreenCapture) {
+                window.cheddar.resetScreenCapture();
+            }
+            
+            // Now initialize screen capture with proper source selection
+            console.log('🔍 Initializing screen capture with correct source...');
+            
             if (!window.cheddar.isScreenCaptureInitialized) {
-                console.log('Initializing screen capture...');
-                await window.cheddar.startCapture('manual', 'high');
+                console.log('✅ Condition passed - initializing screen capture...');
+                try {
+                    console.log('🚀 About to call window.cheddar.startCapture(5, "high")...');
+                    const result = await window.cheddar.startCapture(5, 'high');
+                    console.log('🎉 startCapture returned:', result);
+                    console.log('Screen capture initialized successfully');
+                    console.log('🔍 Immediately after startCapture - isScreenCaptureInitialized:', window.cheddar.isScreenCaptureInitialized);
+                    
+                    // Wait a moment to ensure all initialization is complete
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    console.log('🔍 After 100ms delay - isScreenCaptureInitialized:', window.cheddar.isScreenCaptureInitialized);
+                } catch (initError) {
+                    console.error('Failed to initialize screen capture:', initError);
+                    
+                    // Show user-friendly error message based on error type
+                    if (initError.message.includes('Permission denied') || initError.name === 'NotAllowedError') {
+                        console.error('Screen recording permission denied by user');
+                        alert('Screen recording permission is required to generate reports. Please allow screen recording in your system settings and try again.');
+                    } else if (initError.message.includes('No screen sources')) {
+                        console.error('No screen sources available');
+                        alert('No screen sources are available for capture. Please check your display settings.');
+                    } else {
+                        console.error('Screen capture initialization failed:', initError.message);
+                        alert('Failed to initialize screen capture: ' + initError.message);
+                    }
+                    return; // Exit if screen capture can't be initialized
+                }
+            }
+            
+            // Verify screen capture is working
+            console.log('🔍 About to check isScreenCaptureInitialized...');
+            console.log('🔍 window.cheddar.isScreenCaptureInitialized:', window.cheddar.isScreenCaptureInitialized);
+            if (!window.cheddar.isScreenCaptureInitialized) {
+                console.error('Screen capture is not initialized after startCapture call');
+                console.error('Debug info:', {
+                    cheddarExists: !!window.cheddar,
+                    startCaptureExists: !!window.cheddar?.startCapture,
+                    isScreenCaptureInitialized: window.cheddar?.isScreenCaptureInitialized,
+                    cheddarKeys: Object.keys(window.cheddar || {})
+                });
+                alert('Screen capture initialization failed. Check browser console for details.');
+                return;
             }
             
             // Use the existing manual screenshot function
@@ -499,12 +547,17 @@ export class AssistantView extends LitElement {
                     captureManualScreenshot: typeof window.captureManualScreenshot,
                     cheddar: Object.keys(window.cheddar || {})
                 });
+                alert('Screen capture functions are not available. Please restart the application.');
             }
         } catch (error) {
             console.error('Error generating report:', error);
-            // If permission denied, show user-friendly message
+            
+            // Handle different types of errors
             if (error.name === 'NotAllowedError') {
                 console.log('Screen recording permission denied by user');
+                alert('Screen recording permission is required to generate reports.');
+            } else {
+                alert('Error generating report: ' + error.message);
             }
         }
     }

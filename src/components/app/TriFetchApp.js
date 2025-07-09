@@ -8,7 +8,7 @@ import { AssistantView } from '../views/AssistantView.js';
 import { OnboardingView } from '../views/OnboardingView.js';
 import { AdvancedView } from '../views/AdvancedView.js';
 
-export class CheatingDaddyApp extends LitElement {
+export class TriFetchApp extends LitElement {
     static styles = css`
         * {
             box-sizing: border-box;
@@ -127,7 +127,7 @@ export class CheatingDaddyApp extends LitElement {
         this.startTime = null;
         this.isRecording = false;
         this.sessionActive = false;
-        this.selectedProfile = localStorage.getItem('selectedProfile') || 'interview';
+        this.selectedProfile = localStorage.getItem('selectedProfile') || 'radiology';
         this.selectedLanguage = localStorage.getItem('selectedLanguage') || 'en-US';
         this.selectedScreenshotInterval = localStorage.getItem('selectedScreenshotInterval') || '5';
         this.selectedImageQuality = localStorage.getItem('selectedImageQuality') || 'medium';
@@ -485,4 +485,4 @@ export class CheatingDaddyApp extends LitElement {
     }
 }
 
-customElements.define('cheating-daddy-app', CheatingDaddyApp);
+customElements.define('trifetch-app', TriFetchApp);

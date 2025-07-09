@@ -1,20 +1,31 @@
 // renderer.js
 const { ipcRenderer } = require('electron');
 
-let mediaStream = null;
+// Create reference to the main app element (will be set when DOM is ready)
+let trifetchApp = null;
+
+// Initialize cheddar object early to avoid reference errors
+let cheddar = {
+    setStatus: (text) => {
+        if (trifetchApp) {
+            trifetchApp.setStatus(text);
+        } else {
+            console.log('Status (app not ready):', text);
+        }
+    }
+};
+
 let screenshotInterval = null;
 let audioContext = null;
 let audioProcessor = null;
 let micAudioProcessor = null;
 let audioBuffer = [];
 let isScreenCaptureInitialized = false;
+let isScreenCaptureInitializing = false;
 const SAMPLE_RATE = 24000;
 const AUDIO_CHUNK_DURATION = 0.1; // seconds
 const BUFFER_SIZE = 4096; // Increased buffer size for smoother audio
 
-let hiddenVideo = null;
-let offscreenCanvas = null;
-let offscreenContext = null;
 let currentImageQuality = 'medium'; // Store current image quality for manual screenshots
 
 const isLinux = process.platform === 'linux';
@@ -163,6 +174,24 @@ ipcRenderer.on('update-status', (event, status) => {
 // });
 
 async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'medium') {
+    console.log('Starting direct screenshot capture...');
+    
+    // Prevent multiple simultaneous initialization attempts
+    if (isScreenCaptureInitializing) {
+        console.log('Screen capture initialization already in progress');
+        return;
+    }
+    
+    if (isScreenCaptureInitialized) {
+        console.log('Screen capture already initialized');
+        return;
+    }
+    
+    // Reset any existing capture state
+    stopCapture();
+    
+    isScreenCaptureInitializing = true;
+
     // Store the image quality for manual screenshots
     currentImageQuality = imageQuality;
 
@@ -171,92 +200,122 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
     console.log('🎯 Token tracker reset for new capture session');
 
     try {
-        if (isMacOS) {
-            // On macOS, screen capture only - audio recording disabled
-            console.log('Starting macOS capture (screen only, audio disabled)...');
+        console.log('Starting screen capture using Electron desktopCapturer...');
 
-            // Audio recording disabled
-            // const audioResult = await ipcRenderer.invoke('start-macos-audio');
-            // if (!audioResult.success) {
-            //     throw new Error('Failed to start macOS audio capture: ' + audioResult.error);
-            // }
-
-            // Get screen capture for screenshots
-            mediaStream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    frameRate: 1,
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                },
-                audio: false, // Don't use browser audio on macOS
-            });
-
-            console.log('macOS screen capture started (audio disabled)');
-        } else if (isLinux) {
-            // Linux - screen capture only, audio recording disabled
-            mediaStream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    frameRate: 1,
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                },
-                audio: false, // Don't use system audio loopback on Linux
-            });
-
-            // Audio recording disabled - no microphone capture
-            // let micStream = null;
-            // try {
-            //     micStream = await navigator.mediaDevices.getUserMedia({
-            //         audio: {
-            //             sampleRate: SAMPLE_RATE,
-            //             channelCount: 1,
-            //             echoCancellation: true,
-            //             noiseSuppression: true,
-            //             autoGainControl: true,
-            //         },
-            //         video: false,
-            //     });
-            //
-            //     console.log('Linux microphone capture started');
-            //
-            //     // Setup audio processing for microphone on Linux
-            //     setupLinuxMicProcessing(micStream);
-            // } catch (micError) {
-            //     console.warn('Failed to get microphone access on Linux:', micError);
-            //     // Continue without microphone if permission denied
-            // }
-
-            console.log('Linux screen capture started (audio disabled)');
-        } else {
-            // Windows - screen capture only, audio recording disabled
-            mediaStream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    frameRate: 1,
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                },
-                audio: false, // Audio recording disabled
-            });
-
-            console.log('Windows capture started (audio disabled)');
-
-            // Audio processing disabled
-            // setupWindowsLoopbackProcessing();
+        // First test basic IPC communication
+        console.log('🧪 Testing basic IPC communication...');
+        try {
+            const testResult = await ipcRenderer.invoke('test-ipc');
+            console.log('✅ Test IPC result:', testResult);
+        } catch (testError) {
+            console.error('❌ Test IPC failed:', testError);
+            throw new Error('Basic IPC communication failed: ' + testError.message);
         }
 
-        console.log('MediaStream obtained:', {
-            hasVideo: mediaStream.getVideoTracks().length > 0,
-            hasAudio: mediaStream.getAudioTracks().length > 0,
-            videoTrack: mediaStream.getVideoTracks()[0]?.getSettings(),
+        // Get available screen sources from main process
+        console.log('🔄 Calling IPC: get-screen-sources...');
+        const sourcesResult = await ipcRenderer.invoke('get-screen-sources');
+        console.log('📨 IPC response received:', sourcesResult);
+        
+        if (!sourcesResult.success) {
+            throw new Error('Failed to get screen sources: ' + sourcesResult.error);
+        }
+
+        if (sourcesResult.sources.length === 0) {
+            throw new Error('No screen sources available');
+        }
+
+        console.log(`Found ${sourcesResult.sources.length} available sources`);
+
+        // Find the best screen source (prefer main screen)
+        let selectedSource = null;
+        
+        // Filter to ONLY screen sources - NO windows, cameras, or other sources
+        const screenSources = sourcesResult.sources.filter(source => {
+            const id = source.id.toLowerCase();
+            const name = source.name.toLowerCase();
+            
+            // MUST be a screen source with screen: prefix
+            const isValidScreenId = id.startsWith('screen:');
+            
+            // MUST contain screen or display in name
+            const hasScreenInName = name.includes('screen') || name.includes('display') || name.includes('entire');
+            
+            // ABSOLUTELY NO camera/webcam sources
+            const isNotCamera = !name.includes('camera') && 
+                              !name.includes('webcam') && 
+                              !name.includes('facetime') &&
+                              !name.includes('cam') &&
+                              !id.includes('camera') &&
+                              !id.includes('webcam');
+            
+            // ABSOLUTELY NO window sources (only full screen)
+            const isNotWindow = !id.startsWith('window:');
+            
+            return isValidScreenId && hasScreenInName && isNotCamera && isNotWindow;
         });
+        
+        if (screenSources.length === 0) {
+            throw new Error('No valid screen display sources found. Only camera or window sources available.');
+        }
+        
+        console.log(`Found ${screenSources.length} valid screen sources`);
+        
+        // Look for main screen first from filtered sources
+        selectedSource = screenSources.find(source => {
+            const name = source.name.toLowerCase();
+            return name.includes('screen 1') ||
+                   name.includes('main') ||
+                   name.includes('primary') ||
+                   name.includes('display 1');
+        });
+        
+        // If no main screen found, use the first screen source
+        if (!selectedSource) {
+            selectedSource = screenSources[0];
+        }
+
+        console.log(`Selected screen source: ${selectedSource.name}`);
+
+        // No video streaming needed - just verify screen sources are available for direct screenshots
+        console.log('Screen source verified for direct screenshots');
+
+        // Test direct screenshot capability
+        try {
+            const testScreenshot = await ipcRenderer.invoke('take-direct-screenshot', {
+                sourceId: selectedSource.id
+            });
+            
+            if (!testScreenshot.success) {
+                throw new Error('Direct screenshot test failed: ' + testScreenshot.error);
+            }
+            
+            console.log('✅ Direct screenshot capability verified');
+        } catch (testError) {
+            console.error('❌ Direct screenshot test failed:', testError);
+            throw new Error('Direct screenshot capability test failed: ' + testError.message);
+        }
 
         // Manual mode only - no automatic screenshots
-        console.log('Manual mode enabled - screenshots will be captured on demand only via Generate Report button');
-        // Automatic screenshot intervals disabled
+        console.log('Manual mode enabled - screenshots captured on demand via Generate Report button');
         isScreenCaptureInitialized = true;
+        isScreenCaptureInitializing = false;
+        console.log('✅ Direct screenshot capture initialization completed');
+        
     } catch (err) {
-        console.error('Error starting capture:', err);
-                            cheddar.setStatus('error');
+        console.error('❌ Error starting capture:', err);
+        console.error('❌ Error details:', {
+            name: err.name,
+            message: err.message,
+            stack: err.stack
+        });
+        isScreenCaptureInitialized = false;
+        isScreenCaptureInitializing = false;
+        mediaStream = null;
+        cheddar.setStatus('error');
+        
+        // Re-throw the error so caller knows it failed
+        throw err;
     }
 }
 
@@ -325,110 +384,158 @@ function setupWindowsLoopbackProcessing() {
 
 async function captureScreenshot(imageQuality = 'medium', isManual = false) {
     console.log(`Capturing ${isManual ? 'manual' : 'automated'} screenshot...`);
-    if (!mediaStream) {
-        console.error('No mediaStream available for screenshot. Make sure startCapture was called.');
-        return;
-    }
-
+    
     // Check rate limiting for automated screenshots only
     if (!isManual && tokenTracker.shouldThrottle()) {
-        console.log('⚠️ Automated screenshot skipped due to rate limiting');
+        console.log('Screenshot skipped due to rate limiting');
         return;
     }
 
-    // Lazy init of video element
-    if (!hiddenVideo) {
-        hiddenVideo = document.createElement('video');
-        hiddenVideo.srcObject = mediaStream;
-        hiddenVideo.muted = true;
-        hiddenVideo.playsInline = true;
-        await hiddenVideo.play();
+    try {
+        
+        // Get available screen sources from main process
+        const sourcesResult = await ipcRenderer.invoke('get-screen-sources');
+        
+        if (!sourcesResult.success) {
+            throw new Error('Failed to get screen sources: ' + sourcesResult.error);
+        }
 
-        await new Promise(resolve => {
-            if (hiddenVideo.readyState >= 2) return resolve();
-            hiddenVideo.onloadedmetadata = () => resolve();
+        if (sourcesResult.sources.length === 0) {
+            throw new Error('No screen sources available');
+        }
+
+        // Filter to ONLY screen sources - NO windows, cameras, or other sources
+        const screenSources = sourcesResult.sources.filter(source => {
+            const id = source.id.toLowerCase();
+            const name = source.name.toLowerCase();
+            
+            // MUST be a screen source with screen: prefix
+            const isValidScreenId = id.startsWith('screen:');
+            
+            // MUST contain screen or display in name
+            const hasScreenInName = name.includes('screen') || name.includes('display') || name.includes('entire');
+            
+            // ABSOLUTELY NO camera/webcam sources
+            const isNotCamera = !name.includes('camera') && 
+                              !name.includes('webcam') && 
+                              !name.includes('facetime') &&
+                              !name.includes('cam') &&
+                              !id.includes('camera') &&
+                              !id.includes('webcam');
+            
+            // ABSOLUTELY NO window sources (only full screen)
+            const isNotWindow = !id.startsWith('window:');
+            
+            return isValidScreenId && hasScreenInName && isNotCamera && isNotWindow;
         });
+        
+        if (screenSources.length === 0) {
+            throw new Error('No valid screen display sources found');
+        }
+        
+        // Use the first screen source
+        const selectedSource = screenSources[0];
+        console.log(`Using screen source: ${selectedSource.name}`);
+        
+        // Create a temporary canvas for direct screenshot
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        // Set canvas dimensions (standard screen size)
+        canvas.width = 1920;
+        canvas.height = 1080;
+        
+        // Use desktopCapturer to get a direct screenshot
+        const screenshotResult = await ipcRenderer.invoke('take-direct-screenshot', {
+            sourceId: selectedSource.id
+        });
+        
+        if (!screenshotResult.success) {
+            throw new Error('Failed to take direct screenshot: ' + screenshotResult.error);
+        }
+        
+        // Convert the screenshot data to canvas
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                context.drawImage(img, 0, 0);
+                resolve();
+            };
+            img.onerror = reject;
+            img.src = `data:image/jpeg;base64,${screenshotResult.data}`;
+        });
+        
+        console.log('Screenshot captured:', `${canvas.width}x${canvas.height}`);
 
-        // Lazy init of canvas based on video dimensions
-        offscreenCanvas = document.createElement('canvas');
-        offscreenCanvas.width = hiddenVideo.videoWidth;
-        offscreenCanvas.height = hiddenVideo.videoHeight;
-        offscreenContext = offscreenCanvas.getContext('2d');
-    }
+        let qualityValue;
+        switch (imageQuality) {
+            case 'high':
+                qualityValue = 0.9;
+                break;
+            case 'medium':
+                qualityValue = 0.7;
+                break;
+            case 'low':
+                qualityValue = 0.5;
+                break;
+            default:
+                qualityValue = 0.7; // Default to medium
+        }
 
-    // Check if video is ready
-    if (hiddenVideo.readyState < 2) {
-        console.warn('Video not ready yet, skipping screenshot');
-        return;
-    }
-
-    offscreenContext.drawImage(hiddenVideo, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
-
-    // Check if image was drawn properly by sampling a pixel
-    const imageData = offscreenContext.getImageData(0, 0, 1, 1);
-    const isBlank = imageData.data.every((value, index) => {
-        // Check if all pixels are black (0,0,0) or transparent
-        return index === 3 ? true : value === 0;
-    });
-
-    if (isBlank) {
-        console.warn('Screenshot appears to be blank/black');
-    }
-
-    let qualityValue;
-    switch (imageQuality) {
-        case 'high':
-            qualityValue = 0.9;
-            break;
-        case 'medium':
-            qualityValue = 0.7;
-            break;
-        case 'low':
-            qualityValue = 0.5;
-            break;
-        default:
-            qualityValue = 0.7; // Default to medium
-    }
-
-    offscreenCanvas.toBlob(
-        async blob => {
-            if (!blob) {
-                console.error('Failed to create blob from canvas');
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64data = reader.result.split(',')[1];
-
-                // Validate base64 data
-                if (!base64data || base64data.length < 100) {
-                    console.error('Invalid base64 data generated');
+        canvas.toBlob(
+            async blob => {
+                if (!blob) {
+                    console.error('Failed to create blob from canvas');
                     return;
                 }
 
-                const result = await ipcRenderer.invoke('send-image-content', {
-                    data: base64data,
-                });
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const base64data = reader.result.split(',')[1];
 
-                if (result.success) {
-                    // Track image tokens after successful send
-                    const imageTokens = tokenTracker.calculateImageTokens(offscreenCanvas.width, offscreenCanvas.height);
-                    tokenTracker.addTokens(imageTokens, 'image');
-                    console.log(`📊 Image sent successfully - ${imageTokens} tokens used (${offscreenCanvas.width}x${offscreenCanvas.height})`);
-                } else {
-                    console.error('Failed to send image:', result.error);
-                }
-            };
-            reader.readAsDataURL(blob);
-        },
-        'image/jpeg',
-        qualityValue
-    );
+                    // Validate base64 data
+                    if (!base64data || base64data.length < 100) {
+                        console.error('Invalid base64 data generated');
+                        return;
+                    }
+
+                                    console.log('📤 Sending image to AI...', {
+                    dataLength: base64data.length,
+                    canvasSize: `${canvas.width}x${canvas.height}`,
+                    isManual: isManual
+                });
+                    
+                    const result = await ipcRenderer.invoke('send-image-content', {
+                        data: base64data,
+                    });
+
+                    if (result.success) {
+                        // Track image tokens after successful send
+                        const imageTokens = tokenTracker.calculateImageTokens(canvas.width, canvas.height);
+                        tokenTracker.addTokens(imageTokens, 'image');
+                        console.log(`📊 Image sent successfully - ${imageTokens} tokens used (${canvas.width}x${canvas.height})`);
+                        console.log('✅ AI response received for image');
+                    } else {
+                        console.error('Failed to send image:', result.error);
+                    }
+                };
+                reader.readAsDataURL(blob);
+            },
+            'image/jpeg',
+            qualityValue
+        );
+        
+    } catch (error) {
+        console.error('❌ Error capturing direct screenshot:', error);
+        throw error;
+    }
 }
 
 async function captureManualScreenshot(imageQuality = null) {
     console.log('Manual screenshot triggered');
+    
     const quality = imageQuality || currentImageQuality;
     
     // Only capture screenshot, don't send automatic text message
@@ -437,8 +544,8 @@ async function captureManualScreenshot(imageQuality = null) {
     // Wait a moment for the screenshot to be processed
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Send a focused message for report generation
-    await sendTextMessage(`Please analyze the current screen and generate a comprehensive report based on what you see. Provide clear, actionable insights and recommendations.`);
+    // Send a focused message for medical report generation
+    await sendTextMessage(`Please analyze this medical image and generate a comprehensive radiology report. Include clinical findings, anatomical observations, and relevant medical recommendations based on the imaging study presented.`);
 }
 
 // Expose functions to global scope for external access
@@ -460,12 +567,8 @@ function stopCapture() {
         audioContext = null;
     }
 
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-    }
-
     isScreenCaptureInitialized = false;
+    isScreenCaptureInitializing = false;
 
     // Stop macOS audio capture if running (disabled)
     if (isMacOS) {
@@ -473,15 +576,12 @@ function stopCapture() {
         //     console.error('Error stopping macOS audio:', err);
         // });
     }
+}
 
-    // Clean up hidden elements
-    if (hiddenVideo) {
-        hiddenVideo.pause();
-        hiddenVideo.srcObject = null;
-        hiddenVideo = null;
-    }
-    offscreenCanvas = null;
-    offscreenContext = null;
+function resetScreenCapture() {
+    console.log('🔄 Resetting screen capture to fix source selection...');
+    stopCapture();
+    console.log('✅ Screen capture reset complete - next startCapture will re-select source');
 }
 
 // Send text message to Gemini
@@ -614,51 +714,80 @@ function handleShortcut(shortcutKey) {
     }
 }
 
-// Create reference to the main app element
-const cheatingDaddyApp = document.querySelector('cheating-daddy-app');
+// Initialize the full cheddar object when DOM is ready
+function initializeCheddar() {
+    // Wait for the trifetch-app element to be available
+    const app = document.querySelector('trifetch-app');
+    if (!app) {
+        console.log('trifetch-app element not found yet, retrying...');
+        setTimeout(initializeCheddar, 100);
+        return;
+    }
+    
+    trifetchApp = app;
+    
+    // Update the cheddar object with all functions
+    Object.assign(cheddar, {
+        // Element access
+        element: () => trifetchApp,
+        e: () => trifetchApp,
+        
+        // App state functions - access properties directly from the app element
+        getCurrentView: () => trifetchApp.currentView,
+        getLayoutMode: () => trifetchApp.layoutMode,
+        
+        // Status and response functions
+        setStatus: (text) => trifetchApp.setStatus(text),
+        setResponse: (response) => trifetchApp.setResponse(response),
+        
+        // Core functionality
+        initializeGemini,
+        startCapture,
+        stopCapture,
+        resetScreenCapture,
+        sendTextMessage,
+        handleShortcut,
+        captureScreenshot,
+        
+        // Conversation history functions
+        getAllConversationSessions,
+        getConversationSession,
+        initConversationStorage,
+        
+        // Content protection function
+        getContentProtection: () => {
+            const contentProtection = localStorage.getItem('contentProtection');
+            return contentProtection !== null ? contentProtection === 'true' : true;
+        },
+        
+        // Platform detection
+        isLinux: isLinux,
+        isMacOS: isMacOS,
+    });
+    
+    // Define getter property separately using Object.defineProperty for better control
+    Object.defineProperty(cheddar, 'isScreenCaptureInitialized', {
+        get: function() {
+            console.log('🔍 defineProperty Getter called - isScreenCaptureInitialized variable value:', isScreenCaptureInitialized);
+            return isScreenCaptureInitialized;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    
+    console.log('Cheddar object initialized successfully');
+    console.log('Cheddar properties:', Object.keys(cheddar));
+}
 
-// Consolidated cheddar object - all functions in one place
-const cheddar = {
-    // Element access
-    element: () => cheatingDaddyApp,
-    e: () => cheatingDaddyApp,
-    
-    // App state functions - access properties directly from the app element
-    getCurrentView: () => cheatingDaddyApp.currentView,
-    getLayoutMode: () => cheatingDaddyApp.layoutMode,
-    
-    // Status and response functions
-    setStatus: (text) => cheatingDaddyApp.setStatus(text),
-    setResponse: (response) => cheatingDaddyApp.setResponse(response),
-    
-    // Core functionality
-    initializeGemini,
-    startCapture,
-    stopCapture,
-    sendTextMessage,
-    handleShortcut,
-    captureScreenshot,
-    
-    // Conversation history functions
-    getAllConversationSessions,
-    getConversationSession,
-    initConversationStorage,
-    
-    // Content protection function
-    getContentProtection: () => {
-        const contentProtection = localStorage.getItem('contentProtection');
-        return contentProtection !== null ? contentProtection === 'true' : true;
-    },
-    
-    // Platform detection
-    isLinux: isLinux,
-    isMacOS: isMacOS,
-    
-    // Screen capture status
-    get isScreenCaptureInitialized() {
-        return isScreenCaptureInitialized;
-    },
-};
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeCheddar);
+} else {
+    initializeCheddar();
+}
 
 // Make it globally available
 window.cheddar = cheddar;
+
+// Also expose captureManualScreenshot globally for AssistantView
+window.captureManualScreenshot = captureManualScreenshot;

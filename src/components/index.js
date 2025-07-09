@@ -1,5 +1,5 @@
 // Main app components
-export { CheatingDaddyApp } from './app/CheatingDaddyApp.js';
+export { TriFetchApp } from './app/TriFetchApp.js';
 export { AppHeader } from './app/AppHeader.js';
 
 // View components
