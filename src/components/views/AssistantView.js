@@ -330,7 +330,7 @@ export class AssistantView extends LitElement {
         const profileNames = this.getProfileNames();
         return this.responses.length > 0 && this.currentResponseIndex >= 0
             ? this.responses[this.currentResponseIndex]
-            : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}?`;
+            : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}. Please tell me where I can be of assistance, or click the Generate Report button for me to automate a report for the image showing currently for your review. Once you are happy with the report, you can export it to a text file using Export Report.`;
     }
 
     renderMarkdown(content) {
