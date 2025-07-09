@@ -297,10 +297,7 @@ export class MainView extends LitElement {
                     ${this.getStartButtonText()}
                 </button>
             </div>
-            <p class="description">
-                dont have an api key?
-                <span @click=${this.handleAPIKeyHelpClick} class="link">get one here</span>
-            </p>
+
         `;
     }
 }

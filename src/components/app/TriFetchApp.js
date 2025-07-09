@@ -2,13 +2,13 @@ import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
 import { AppHeader } from './AppHeader.js';
 import { MainView } from '../views/MainView.js';
 import { CustomizeView } from '../views/CustomizeView.js';
-import { HelpView } from '../views/HelpView.js';
+
 import { HistoryView } from '../views/HistoryView.js';
 import { AssistantView } from '../views/AssistantView.js';
 import { OnboardingView } from '../views/OnboardingView.js';
 import { AdvancedView } from '../views/AdvancedView.js';
 
-export class CheatingDaddyApp extends LitElement {
+export class TriFetchApp extends LitElement {
     static styles = css`
         * {
             box-sizing: border-box;
@@ -127,7 +127,7 @@ export class CheatingDaddyApp extends LitElement {
         this.startTime = null;
         this.isRecording = false;
         this.sessionActive = false;
-        this.selectedProfile = localStorage.getItem('selectedProfile') || 'interview';
+        this.selectedProfile = localStorage.getItem('selectedProfile') || 'radiology';
         this.selectedLanguage = localStorage.getItem('selectedLanguage') || 'en-US';
         this.selectedScreenshotInterval = localStorage.getItem('selectedScreenshotInterval') || '5';
         this.selectedImageQuality = localStorage.getItem('selectedImageQuality') || 'medium';
@@ -193,10 +193,7 @@ export class CheatingDaddyApp extends LitElement {
         this.requestUpdate();
     }
 
-    handleHelpClick() {
-        this.currentView = 'help';
-        this.requestUpdate();
-    }
+
 
     handleHistoryClick() {
         this.currentView = 'history';
@@ -297,13 +294,7 @@ export class CheatingDaddyApp extends LitElement {
         this.requestUpdate();
     }
 
-    // Help view event handlers
-    async handleExternalLinkClick(url) {
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            await ipcRenderer.invoke('open-external', url);
-        }
-    }
+
 
     // Assistant view event handlers
     async handleSendText(message) {
@@ -402,8 +393,7 @@ export class CheatingDaddyApp extends LitElement {
                     ></customize-view>
                 `;
 
-            case 'help':
-                return html` <help-view .onExternalLinkClick=${url => this.handleExternalLinkClick(url)}></help-view> `;
+
 
             case 'history':
                 return html` <history-view></history-view> `;
@@ -441,7 +431,7 @@ export class CheatingDaddyApp extends LitElement {
                         .startTime=${this.startTime}
                         .advancedMode=${this.advancedMode}
                         .onCustomizeClick=${() => this.handleCustomizeClick()}
-                        .onHelpClick=${() => this.handleHelpClick()}
+
                         .onHistoryClick=${() => this.handleHistoryClick()}
                         .onAdvancedClick=${() => this.handleAdvancedClick()}
                         .onCloseClick=${() => this.handleClose()}
@@ -485,4 +475,4 @@ export class CheatingDaddyApp extends LitElement {
     }
 }
 
-customElements.define('cheating-daddy-app', CheatingDaddyApp);
+customElements.define('trifetch-app', TriFetchApp);
