@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>TriFetch</string>
+    <key>CFBundleExecutable</key>
+    <string>TriFetch</string>
+    <key>CFBundleIconFile</key>
+    <string>logo.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.trifetch.clinical-assistant</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>TriFetch</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.4.0</string>
+    <key>CFBundleVersion</key>
+    <string>0.4.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSQuitAlwaysKeepsWindows</key>
+    <false/>
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+    
+    <!-- Screen Recording Permission -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>TriFetch needs screen recording permission to capture screenshots for medical report generation and AI-powered analysis.</string>
+    
+    <!-- Camera Permission (if needed) -->
+    <key>NSCameraUsageDescription</key>
+    <string>TriFetch may need camera access for medical imaging analysis.</string>
+    
+    <!-- Microphone Permission (if needed) -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>TriFetch may need microphone access for audio-based medical analysis.</string>
+    
+    <!-- File Access -->
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>TriFetch needs access to save and load medical reports and analysis data.</string>
+    
+    <!-- Network Access -->
+    <key>NSNetworkingUsageDescription</key>
+    <string>TriFetch requires network access to communicate with AI services for medical analysis.</string>
+    
+    <!-- App Category -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.medical</string>
+    
+    <!-- Allow unsigned executables (for development) -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    
+    <!-- URL Schemes -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.trifetch.clinical-assistant</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>trifetch</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist> 

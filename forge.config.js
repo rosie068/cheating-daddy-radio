@@ -7,6 +7,9 @@ module.exports = {
         extraResource: ['./src/assets/SystemAudioDump'],
         name: 'TriFetch',
         icon: 'src/assets/logo',
+        appBundleId: 'com.trifetch.clinical-assistant',
+        appCategoryType: 'public.app-category.medical',
+        extendInfo: 'Info.plist',
         // Override the default Electron license with our GPL-3.0 license
         afterCopy: [(buildPath, electronVersion, platform, arch, callback) => {
             const fs = require('fs');
