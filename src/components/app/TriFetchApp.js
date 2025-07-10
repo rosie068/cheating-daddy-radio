@@ -250,9 +250,30 @@ export class TriFetchApp extends LitElement {
             return;
         }
 
+        // Check screen recording permission once at startup
+        console.log('🔍 Checking screen recording permission at startup...');
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            try {
+                const permissionResult = await ipcRenderer.invoke('check-screen-recording-permission');
+                console.log('📋 Permission check result:', permissionResult);
+                
+                if (!permissionResult.success) {
+                    console.error('❌ Permission check failed:', permissionResult.error);
+                } else if (!permissionResult.granted) {
+                    console.log('❌ Screen recording permission not granted');
+                    // User will see permission dialogs during the check, no need to show additional alerts
+                } else {
+                    console.log('✅ Screen recording permission granted');
+                }
+            } catch (permError) {
+                console.error('❌ Permission check error:', permError);
+            }
+        }
+
         await cheddar.initializeGemini(this.selectedProfile, this.selectedLanguage);
         // Screen capture will be initialized only when Generate Report is clicked
-        // No automatic screen capture startup to avoid permission popups
+        // Permission is now checked at startup, not during screen capture
         this.responses = [];
         this.currentResponseIndex = -1;
         this.startTime = Date.now();

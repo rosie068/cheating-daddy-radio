@@ -33,21 +33,17 @@
     <key>NSScreenCaptureUsageDescription</key>
     <string>TriFetch needs screen recording permission to capture screenshots for medical report generation and AI-powered analysis.</string>
     
-    <!-- Camera Permission (if needed) -->
-    <key>NSCameraUsageDescription</key>
-    <string>TriFetch may need camera access for medical imaging analysis.</string>
-    
-    <!-- Microphone Permission (if needed) -->
-    <key>NSMicrophoneUsageDescription</key>
-    <string>TriFetch may need microphone access for audio-based medical analysis.</string>
-    
-    <!-- File Access -->
-    <key>NSDocumentsFolderUsageDescription</key>
-    <string>TriFetch needs access to save and load medical reports and analysis data.</string>
-    
-    <!-- Network Access -->
-    <key>NSNetworkingUsageDescription</key>
-    <string>TriFetch requires network access to communicate with AI services for medical analysis.</string>
+    <!-- App visibility settings -->
+    <key>LSUIElement</key>
+    <false/>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
+    <key>NSSupportsSuddenTermination</key>
+    <false/>
+    <key>LSBackgroundOnly</key>
+    <false/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
     
     <!-- App Category -->
     <key>LSApplicationCategoryType</key>

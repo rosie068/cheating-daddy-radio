@@ -28,7 +28,7 @@ function createMainWindow() {
             app.dock.show();
         }
         
-        console.log('✅ Main window created successfully');
+        console.log('Main window created successfully');
         return mainWindow;
     } catch (error) {
         console.error('❌ Error creating main window:', error);
@@ -63,14 +63,14 @@ if (!gotTheLock) {
         setupGeminiIpcHandlers(geminiSessionRef);
         setupGeneralIpcHandlers();
         
-        console.log('✅ App initialization complete');
+        console.log('App initialization complete');
     }).catch(error => {
-        console.error('❌ Error during app initialization:', error);
+        console.error('Error during app initialization:', error);
     });
 }
 
 app.on('window-all-closed', () => {
-    console.log('🔄 All windows closed');
+    console.log('All windows closed');
     stopMacOSAudioCapture();
     if (process.platform !== 'darwin') {
         app.quit();
@@ -78,12 +78,12 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-    console.log('🔄 App preparing to quit');
+    console.log('App preparing to quit');
     stopMacOSAudioCapture();
 });
 
 app.on('activate', () => {
-    console.log('🔄 App activated');
+    console.log('App activated');
     
     // Only create window if app is ready and no windows exist
     if (appIsReady && app.isReady() && BrowserWindow.getAllWindows().length === 0) {
@@ -174,101 +174,227 @@ function setupGeneralIpcHandlers() {
         return { success: true, message: 'IPC communication working' };
     });
 
+    // Global permission status - checked once at startup
+    let screenRecordingPermissionGranted = false;
+    let permissionCheckedAtStartup = false;
+    
+    // Cache for screen sources to prevent multiple requests
+    let screenSourcesCache = null;
+    let lastSourcesCheck = 0;
+    let isGettingScreenSources = false;
+    const SOURCES_CACHE_DURATION = 10000; // 10 seconds cache
+
+    // Check screen recording permission once at startup
+    ipcMain.handle('check-screen-recording-permission', async (event) => {
+        console.log('🔍 Checking screen recording permission at startup...');
+        
+        if (permissionCheckedAtStartup) {
+            console.log('Permission already checked at startup, status:', screenRecordingPermissionGranted);
+            return { success: true, granted: screenRecordingPermissionGranted };
+        }
+        
+        if (process.platform === 'darwin') {
+            console.log('🍎 macOS detected - checking screen recording permission...');
+            
+            const permissionStatus = systemPreferences.getMediaAccessStatus('screen');
+            console.log('Current permission status:', permissionStatus);
+            
+            if (permissionStatus === 'granted') {
+                console.log('Screen recording permission already granted');
+                screenRecordingPermissionGranted = true;
+                permissionCheckedAtStartup = true;
+                return { success: true, granted: true };
+            } else if (permissionStatus === 'denied') {
+                console.log('Screen recording permission denied');
+                screenRecordingPermissionGranted = false;
+                permissionCheckedAtStartup = true;
+                
+                const response = await dialog.showMessageBox(mainWindow, {
+                    type: 'warning',
+                    title: 'Screen Recording Permission Required',
+                    message: 'Screen recording permission is required to generate reports.',
+                    detail: 'To enable screen recording:\n\n1. Open System Preferences\n2. Go to Security & Privacy\n3. Click Privacy tab\n4. Select Screen Recording from the list\n5. Check the box next to TriFetch\n6. Restart the app',
+                    buttons: ['Open System Preferences', 'Cancel'],
+                    defaultId: 0,
+                    cancelId: 1
+                });
+                
+                if (response.response === 0) {
+                    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+                }
+                
+                return { success: true, granted: false };
+            } else {
+                console.log('Permission not determined, requesting permission...');
+                
+                try {
+                    // Attempt to register the app with macOS
+                    const { desktopCapturer } = require('electron');
+                    
+                    // Try to trigger permission registration
+                    try {
+                        await desktopCapturer.getSources({ 
+                            types: ['screen'], 
+                            thumbnailSize: { width: 150, height: 150 },
+                            fetchWindowIcons: false
+                        });
+                    } catch (registrationError) {
+                        console.log('Registration attempt failed:', registrationError.message);
+                    }
+                    
+                    // Wait for system processing
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Check permission status after registration attempt
+                    const newStatus = systemPreferences.getMediaAccessStatus('screen');
+                    console.log('Permission status after registration:', newStatus);
+                    
+                    screenRecordingPermissionGranted = (newStatus === 'granted');
+                    permissionCheckedAtStartup = true;
+                    
+                    // Handle different permission states
+                    if (newStatus === 'granted') {
+                        console.log('Screen recording permission granted');
+                    } else if (newStatus === 'denied') {
+                        console.log('Permission denied - user must enable in System Preferences');
+                    } else {
+                        // Show dialog for unclear permission state
+                        const response = await dialog.showMessageBox(mainWindow, {
+                            type: 'info',
+                            title: 'Screen Recording Setup Required',
+                            message: 'TriFetch needs screen recording permission to generate reports.',
+                            detail: 'The app may not appear in System Preferences automatically. Try these steps:\n\n1. Open System Preferences\n2. Go to Privacy & Security\n3. Click Screen & System Audio Recording\n4. Look for "TriFetch", "Electron", or "com.trifetch.clinical-assistant"\n5. If not found, restart TriFetch and try again\n6. You may need to move the app to your Applications folder first\n\nAlternatively, try using the app - it may work even without appearing in the list.',
+                            buttons: ['Open System Preferences', 'Try Anyway', 'Cancel'],
+                            defaultId: 0,
+                            cancelId: 2
+                        });
+                        
+                        if (response.response === 0) {
+                            await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+                        } else if (response.response === 1) {
+                            // User wants to try anyway
+                            screenRecordingPermissionGranted = true;
+                            console.log('User chose to try anyway - setting permission as granted');
+                        }
+                    }
+
+                    
+                    return { success: true, granted: screenRecordingPermissionGranted };
+                    
+                } catch (permError) {
+                    console.error('Permission request failed:', permError);
+                    screenRecordingPermissionGranted = false;
+                    permissionCheckedAtStartup = true;
+                    return { success: true, granted: false };
+                }
+            }
+        } else {
+            // Non-macOS platforms don't need permission
+            screenRecordingPermissionGranted = true;
+            permissionCheckedAtStartup = true;
+            return { success: true, granted: true };
+        }
+    });
+
     // Screen capture IPC handlers using desktopCapturer
     ipcMain.handle('get-screen-sources', async (event) => {
-        console.log('🎯 get-screen-sources IPC handler called!');
-        console.log('📋 Event details:', { 
-            senderType: event.sender.constructor.name,
-            senderId: event.sender.id 
-        });
+        console.log('get-screen-sources called');
+        
+        // Check if permission was granted at startup
+        if (!screenRecordingPermissionGranted) {
+            console.log('Screen recording permission not granted');
+            
+            // Show dialog with options
+            const response = await dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Screen Recording Permission Required',
+                message: 'TriFetch cannot generate reports without screen recording permission.',
+                detail: 'Please follow these steps:\n\n1. Move TriFetch to your Applications folder\n2. Restart TriFetch\n3. Grant permission when prompted\n\nIf TriFetch doesn\'t appear in System Preferences:\n• Look for "Electron" or "com.trifetch.clinical-assistant" in the list\n• Try the "Force Registration" option below\n• Restart your Mac if nothing works',
+                buttons: ['Open System Preferences', 'Force Registration', 'Cancel'],
+                defaultId: 0,
+                cancelId: 2
+            });
+            
+            if (response.response === 0) {
+                await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+            } else if (response.response === 1) {
+                // Try force registration
+                console.log('User chose force registration, attempting...');
+                
+                try {
+                    const { desktopCapturer } = require('electron');
+                    
+                    // Attempt force registration
+                    const testSources = await desktopCapturer.getSources({ 
+                        types: ['screen', 'window'], 
+                        thumbnailSize: { width: 200, height: 200 },
+                        fetchWindowIcons: true
+                    });
+                    
+                    console.log('Force registration completed, got', testSources.length, 'sources');
+                    
+                    // Update permission status
+                    const newStatus = systemPreferences.getMediaAccessStatus('screen');
+                    console.log('Permission status after force registration:', newStatus);
+                    
+                    if (newStatus === 'granted') {
+                        screenRecordingPermissionGranted = true;
+                        console.log('Permission now granted');
+                        
+                        // Continue with the normal flow
+                    } else {
+                        console.log('Permission still not granted, but trying anyway...');
+                        // Sometimes the sources work even if the permission status isn't updated
+                        screenRecordingPermissionGranted = true;
+                        
+                        // Show success message
+                        await dialog.showMessageBox(mainWindow, {
+                            type: 'info',
+                            title: 'Registration Attempted',
+                            message: 'Force registration completed.',
+                            detail: 'The app should now appear in System Preferences > Privacy & Security > Screen Recording. Please enable it there and try again.\n\nIf you don\'t see it, try restarting TriFetch.',
+                            buttons: ['OK']
+                        });
+                        
+                        return { success: false, error: 'Force registration completed. Please check System Preferences and try again.' };
+                    }
+                    
+                } catch (forceError) {
+                    console.log('Force registration failed:', forceError.message);
+                    return { success: false, error: 'Force registration failed. Please restart the app and grant permission.' };
+                }
+            } else {
+                return { success: false, error: 'Screen recording permission not granted. Please restart the app and grant permission.' };
+            }
+        }
+
+        // Prevent multiple simultaneous calls
+        if (isGettingScreenSources) {
+            console.log('Another get-screen-sources call is in progress, waiting...');
+            while (isGettingScreenSources) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            // Return cached result if available
+            if (screenSourcesCache && (Date.now() - lastSourcesCheck) < SOURCES_CACHE_DURATION) {
+                console.log('Returning cached screen sources');
+                return screenSourcesCache;
+            }
+        }
+
+        isGettingScreenSources = true;
+
         try {
             const { desktopCapturer } = require('electron');
             console.log('🔍 Getting screen sources using desktopCapturer...');
             
-            // Check screen recording permission on macOS
-            if (process.platform === 'darwin') {
-                console.log('🍎 macOS detected - checking screen recording permission...');
-                
-                const permissionStatus = systemPreferences.getMediaAccessStatus('screen');
-                console.log('📋 Current permission status:', permissionStatus);
-                
-                // Always try to request permission first, regardless of current status
-                // This will trigger the permission dialog if the app is properly registered
-                console.log('🔑 Attempting to request screen recording permission...');
-                
-                try {
-                    // Try to get screen sources - this should trigger permission dialog
-                    const testSources = await desktopCapturer.getSources({ 
-                        types: ['screen'], 
-                        thumbnailSize: { width: 1, height: 1 } 
-                    });
-                    
-                    console.log('✅ Permission request successful, got', testSources.length, 'screen sources');
-                    
-                    // Check permission status again after the attempt
-                    const newStatus = systemPreferences.getMediaAccessStatus('screen');
-                    console.log('📋 New permission status after request:', newStatus);
-                    
-                    if (newStatus === 'denied') {
-                        console.log('❌ User explicitly denied screen recording permission');
-                        const response = await dialog.showMessageBox(mainWindow, {
-                            type: 'warning',
-                            title: 'Screen Recording Permission Required',
-                            message: 'Screen recording permission is required to capture screenshots.',
-                            detail: 'To enable screen recording:\n\n1. Open System Preferences\n2. Go to Security & Privacy\n3. Click Privacy tab\n4. Select Screen Recording from the list\n5. Check the box next to TriFetch\n6. Restart the app if needed',
-                            buttons: ['Open System Preferences', 'Cancel'],
-                            defaultId: 0,
-                            cancelId: 1
-                        });
-                        
-                        if (response.response === 0) {
-                            // Open System Preferences to Privacy settings
-                            await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
-                        }
-                        
-                        return { success: false, error: 'Screen recording permission denied. Please grant permission in System Preferences.' };
-                    }
-                    
-                    if (newStatus === 'not-determined') {
-                        console.log('❓ Permission still not determined after request');
-                        return { success: false, error: 'Screen recording permission is still pending. Please try again.' };
-                    }
-                    
-                    if (newStatus === 'granted') {
-                        console.log('✅ Screen recording permission granted');
-                    }
-                    
-                } catch (permError) {
-                    console.error('❌ Permission request failed:', permError);
-                    
-                    // Check final permission status
-                    const finalStatus = systemPreferences.getMediaAccessStatus('screen');
-                    console.log('📋 Final permission status:', finalStatus);
-                    
-                    if (finalStatus === 'denied') {
-                        console.log('❌ Screen recording permission denied');
-                        const response = await dialog.showMessageBox(mainWindow, {
-                            type: 'warning',
-                            title: 'Screen Recording Permission Required',
-                            message: 'Screen recording permission is required to capture screenshots.',
-                            detail: 'To enable screen recording:\n\n1. Open System Preferences\n2. Go to Security & Privacy\n3. Click Privacy tab\n4. Select Screen Recording from the list\n5. Check the box next to TriFetch\n6. Restart the app if needed',
-                            buttons: ['Open System Preferences', 'Cancel'],
-                            defaultId: 0,
-                            cancelId: 1
-                        });
-                        
-                        if (response.response === 0) {
-                            await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
-                        }
-                        
-                        return { success: false, error: 'Screen recording permission denied. Please grant permission in System Preferences.' };
-                    }
-                    
-                    return { success: false, error: 'Failed to request screen recording permission: ' + permError.message };
-                }
+            // Return cached screen sources if available and recent
+            if (screenSourcesCache && (Date.now() - lastSourcesCheck) < SOURCES_CACHE_DURATION) {
+                console.log('📋 Returning cached screen sources');
+                isGettingScreenSources = false;
+                return screenSourcesCache;
             }
             
-            console.log('📱 Calling desktopCapturer.getSources()...');
+            console.log('Getting screen sources...');
             
             // Add timeout to prevent hanging
             const timeoutPromise = new Promise((_, reject) => {
@@ -280,15 +406,9 @@ function setupGeneralIpcHandlers() {
                 thumbnailSize: { width: 150, height: 150 }
             });
             
-            console.log('⏰ Waiting for screen sources (10 second timeout)...');
             const sources = await Promise.race([sourcesPromise, timeoutPromise]);
             
-            console.log(`✅ Found ${sources.length} screen sources`);
-            
-            // Log each source for debugging
-            sources.forEach((source, index) => {
-                console.log(`   ${index}: ${source.name} (${source.id})`);
-            });
+            console.log(`Found ${sources.length} screen sources`);
             
             const result = { 
                 success: true, 
@@ -299,12 +419,64 @@ function setupGeneralIpcHandlers() {
                 }))
             };
             
-            console.log('🎉 Screen sources result prepared, returning...');
+            // Cache the result
+            screenSourcesCache = result;
+            lastSourcesCheck = Date.now();
+            
+            console.log('Screen sources result prepared');
+            isGettingScreenSources = false;
             return result;
             
         } catch (error) {
             console.error('❌ Error getting screen sources:', error);
             console.error('Error stack:', error.stack);
+            isGettingScreenSources = false;
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Clear screen sources cache (useful for testing)
+    ipcMain.handle('clear-screen-sources-cache', async (event) => {
+        console.log('🗑️ Clearing screen sources cache');
+        screenSourcesCache = null;
+        lastSourcesCheck = 0;
+        isGettingScreenSources = false;
+        return { success: true, message: 'Cache cleared' };
+    });
+
+    // Force app registration with macOS permission system (useful if app doesn't appear in System Preferences)
+    ipcMain.handle('force-permission-registration', async (event) => {
+        console.log('Forcing app registration with macOS permission system...');
+        
+        try {
+            const { desktopCapturer } = require('electron');
+            
+            // Attempt to access screen recording to trigger system registration
+            console.log('Triggering permission registration...');
+            const sources = await desktopCapturer.getSources({ 
+                types: ['screen'], 
+                thumbnailSize: { width: 200, height: 200 },
+                fetchWindowIcons: false
+            });
+            
+            console.log('Registration attempt completed, found', sources.length, 'sources');
+            
+            // Wait for system to process
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const status = systemPreferences.getMediaAccessStatus('screen');
+            console.log('Permission status after registration:', status);
+            
+            if (status === 'granted') {
+                return { success: true, message: 'Permission already granted', status };
+            } else if (status === 'denied') {
+                return { success: true, message: 'App should now appear in System Preferences > Privacy & Security > Screen Recording. Please enable it there.', status };
+            } else {
+                return { success: true, message: 'Permission dialog should have appeared. App should now be visible in System Preferences.', status };
+            }
+            
+        } catch (error) {
+            console.error('Registration failed:', error);
             return { success: false, error: error.message };
         }
     });
@@ -343,5 +515,5 @@ function setupGeneralIpcHandlers() {
         }
     });
     
-    console.log('✅ General IPC handlers setup complete');
+    console.log('General IPC handlers setup complete');
 }

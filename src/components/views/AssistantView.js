@@ -306,6 +306,7 @@ export class AssistantView extends LitElement {
         currentResponseIndex: { type: Number },
         selectedProfile: { type: String },
         onSendText: { type: Function },
+        _isGeneratingReport: { type: Boolean },
     };
 
     constructor() {
@@ -314,6 +315,7 @@ export class AssistantView extends LitElement {
         this.currentResponseIndex = -1;
         this.selectedProfile = 'interview';
         this.onSendText = () => {};
+        this._isGeneratingReport = false;
     }
 
     getProfileNames() {
@@ -330,7 +332,7 @@ export class AssistantView extends LitElement {
         const profileNames = this.getProfileNames();
         return this.responses.length > 0 && this.currentResponseIndex >= 0
             ? this.responses[this.currentResponseIndex]
-            : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}. Please tell me where I can be of assistance, or click the Generate Report button for me to automate a report for the image showing currently for your review. Once you are happy with the report, you can export it to a text file using Export Report.`;
+            : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}. Please provide me with any relevant clinical information, and click on Generate Report for me to view the current image and automate a report for your review. Once you are happy with the report, you can export it to a text file using Export Report.`;
     }
 
     renderMarkdown(content) {
@@ -476,8 +478,17 @@ export class AssistantView extends LitElement {
     }
 
     async handleGenerateReport() {
+        // Prevent multiple simultaneous Generate Report calls
+        if (this._isGeneratingReport) {
+            console.log('Generate Report already in progress, skipping...');
+            return;
+        }
+        
+        this._isGeneratingReport = true;
+        
         // Initialize screen capture and generate report
         try {
+            
             // First, reset screen capture to ensure correct source selection
             console.log('🔄 Forcing screen capture reset to fix source selection...');
             if (window.cheddar.resetScreenCapture) {
@@ -559,6 +570,9 @@ export class AssistantView extends LitElement {
             } else {
                 alert('Error generating report: ' + error.message);
             }
+        } finally {
+            // Always reset the flag when done
+            this._isGeneratingReport = false;
         }
     }
 
@@ -667,8 +681,8 @@ export class AssistantView extends LitElement {
                 <input type="text" id="textInput" placeholder="Type a message to the AI..." @keydown=${this.handleTextKeydown} />
 
                 <div class="button-group">
-                    <button class="generate-report-button" @click=${this.handleGenerateReport}>
-                        Generate Report
+                    <button class="generate-report-button" @click=${this.handleGenerateReport} ?disabled=${this._isGeneratingReport}>
+                        ${this._isGeneratingReport ? 'Generating...' : 'Generate Report'}
                     </button>
 
                     <button class="export-report-button" @click=${this.handleExportReport} ?disabled=${this.responses.length === 0}>
