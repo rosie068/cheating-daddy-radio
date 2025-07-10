@@ -39,6 +39,31 @@ sudo xattr -r -d com.apple.quarantine TriFetch.app
 open TriFetch.app
 ```
 
+## Screen Recording Permissions
+
+TriFetch requires screen recording permission to capture screenshots for medical report generation. Here's what to expect:
+
+### First Time Permission Request
+1. **When you first use the "Generate Report" feature**, macOS will ask for screen recording permission
+2. **TriFetch should now appear** in the permission dialog and in System Preferences
+3. **Click "Allow"** to grant permission
+
+### If Permission Dialog Doesn't Appear
+1. Go to **System Preferences** → **Security & Privacy**
+2. Click the **Privacy** tab
+3. Select **Screen Recording** from the left sidebar
+4. **Look for "TriFetch"** in the list of apps
+5. **Check the box** next to TriFetch to enable screen recording
+6. **Restart TriFetch** if it was already running
+
+### If TriFetch Still Doesn't Appear in the List
+This usually happens if the app wasn't properly installed:
+1. **Delete TriFetch** from Applications folder
+2. **Empty your Trash**
+3. **Re-download and reinstall** the app
+4. **Open the app** using the right-click method above
+5. **Try the Generate Report feature** again
+
 ## Why This Happens
 
 - TriFetch is not signed with an Apple Developer certificate
@@ -60,6 +85,13 @@ If you see this message:
 2. Try restarting your Mac
 3. Check that you have sufficient permissions to run applications
 
+### Screen Recording Permission Issues
+If TriFetch isn't appearing in Screen Recording permissions:
+1. Make sure the app is properly installed in Applications folder
+2. Try opening the app with right-click → Open first
+3. Delete and reinstall the app if it still doesn't appear
+4. Check that you're running macOS 10.15 (Catalina) or later
+
 ### Still having issues?
 - Make sure you're running macOS 10.15 (Catalina) or later
 - Ensure you have enough disk space for the application
@@ -69,10 +101,16 @@ If you see this message:
 
 After successfully opening TriFetch:
 
-1. **Grant Permissions**: TriFetch will ask for screen recording permissions
+1. **Grant Permissions**: TriFetch will ask for screen recording permissions when you first use "Generate Report"
 2. **API Key**: You'll need to add your Gemini API key in the main screen
 3. **Onboarding**: Follow the onboarding slides to set up the app
 4. **Passcode**: Enter your provided passcode to start using the AI assistant
+
+## What's New in This Version
+
+- **Fixed Screen Recording Permissions**: TriFetch now properly appears in macOS Screen Recording permissions
+- **Improved App Registration**: Better integration with macOS system permissions
+- **Enhanced User Experience**: Clearer permission dialogs and better error messages
 
 ---
 
