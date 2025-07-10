@@ -262,7 +262,7 @@ export class TriFetchApp extends LitElement {
     async handleAPIKeyHelp() {
         if (window.require) {
             const { ipcRenderer } = window.require('electron');
-            await ipcRenderer.invoke('open-external', 'https://cheatingdaddy.com/help/api-key');
+            await ipcRenderer.invoke('open-external', 'https://trifetch.com/help/api-key');
         }
     }
 

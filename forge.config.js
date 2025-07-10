@@ -5,7 +5,7 @@ module.exports = {
     packagerConfig: {
         asar: true,
         extraResource: ['./src/assets/SystemAudioDump'],
-        name: 'Cheating Daddy',
+        name: 'TriFetch',
         icon: 'src/assets/logo',
         // use `security find-identity -v -p codesigning` to find your identity
         // for macos signing
@@ -30,15 +30,15 @@ module.exports = {
         {
             name: '@electron-forge/maker-squirrel',
             config: {
-                name: 'cheating-daddy',
-                productName: 'Cheating Daddy',
-                shortcutName: 'Cheating Daddy',
+                name: 'trifetch',
+                productName: 'TriFetch',
+                shortcutName: 'TriFetch',
                 createDesktopShortcut: true,
                 createStartMenuShortcut: true,
             },
         },
         {
-            name: '@electron-forge/maker-dmg',
+            name: '@electron-forge/maker-zip',
             platforms: ['darwin'],
         },
         {
