@@ -149,14 +149,19 @@ function arrayBufferToBase64(buffer) {
 }
 
 async function initializeGemini(profile = 'interview', language = 'en-US') {
+    console.log('🔵 initializeGemini called from renderer with:', { profile, language });
     const apiKey = localStorage.getItem('apiKey')?.trim();
     if (apiKey) {
+        console.log('🔑 API key found, calling initialize-gemini IPC...');
         const success = await ipcRenderer.invoke('initialize-gemini', apiKey, localStorage.getItem('customPrompt') || '', profile, language);
-                  if (success) {
-              cheddar.setStatus('Live');
-          } else {
-              cheddar.setStatus('error');
-          }
+        console.log('🔵 initialize-gemini IPC returned:', success);
+        if (success) {
+            cheddar.setStatus('Live');
+        } else {
+            cheddar.setStatus('error');
+        }
+    } else {
+        console.log('❌ No API key found in localStorage');
     }
 }
 
@@ -501,14 +506,54 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                         return;
                     }
 
-                                    console.log('📤 Sending image to AI...', {
-                    dataLength: base64data.length,
-                    canvasSize: `${canvas.width}x${canvas.height}`,
-                    isManual: isManual
-                });
+                    // Enhanced debugging logs
+                    console.log('🔍 Screenshot capture details:', {
+                        dataLength: base64data.length,
+                        canvasSize: `${canvas.width}x${canvas.height}`,
+                        isManual: isManual,
+                        blobSize: blob.size,
+                        qualityValue: qualityValue,
+                        timestamp: new Date().toISOString()
+                    });
+
+                    // Save screenshot locally for verification
+                    try {
+                        const saveResult = await ipcRenderer.invoke('save-screenshot-locally', {
+                            data: base64data,
+                            filename: `screenshot_${Date.now()}.jpg`,
+                            metadata: {
+                                width: canvas.width,
+                                height: canvas.height,
+                                quality: qualityValue,
+                                timestamp: new Date().toISOString(),
+                                isManual: isManual
+                            }
+                        });
+                        
+                        if (saveResult.success) {
+                            console.log('💾 Screenshot saved locally:', saveResult.path);
+                        } else {
+                            console.warn('⚠️ Failed to save screenshot locally:', saveResult.error);
+                        }
+                    } catch (saveError) {
+                        console.warn('⚠️ Error saving screenshot locally:', saveError);
+                    }
+
+                    console.log('📤 Sending image to AI...', {
+                        dataLength: base64data.length,
+                        canvasSize: `${canvas.width}x${canvas.height}`,
+                        isManual: isManual
+                    });
                     
                     const result = await ipcRenderer.invoke('send-image-content', {
                         data: base64data,
+                        metadata: {
+                            width: canvas.width,
+                            height: canvas.height,
+                            quality: qualityValue,
+                            timestamp: new Date().toISOString(),
+                            isManual: isManual
+                        }
                     });
 
                     if (result.success) {
@@ -518,7 +563,7 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                         console.log(`📊 Image sent successfully - ${imageTokens} tokens used (${canvas.width}x${canvas.height})`);
                         console.log('✅ AI response received for image');
                     } else {
-                        console.error('Failed to send image:', result.error);
+                        console.error('❌ Failed to send image:', result.error);
                     }
                 };
                 reader.readAsDataURL(blob);
@@ -548,8 +593,37 @@ async function captureManualScreenshot(imageQuality = null) {
     await sendTextMessage(`Please analyze this medical image and generate a comprehensive radiology report. Include clinical findings, anatomical observations, and relevant medical recommendations based on the imaging study presented.`);
 }
 
+// Helper function to open screenshots directory
+async function openScreenshotsDirectory() {
+    try {
+        const result = await ipcRenderer.invoke('open-screenshots-directory');
+        if (result.success) {
+            console.log('📁 Screenshots directory opened:', result.path);
+        } else {
+            console.error('❌ Failed to open screenshots directory:', result.error);
+        }
+        return result;
+    } catch (error) {
+        console.error('❌ Error opening screenshots directory:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Helper function to get screenshots directory path
+async function getScreenshotsDirectory() {
+    try {
+        const result = await ipcRenderer.invoke('get-screenshots-directory');
+        return result;
+    } catch (error) {
+        console.error('❌ Error getting screenshots directory:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // Expose functions to global scope for external access
 window.captureManualScreenshot = captureManualScreenshot;
+window.openScreenshotsDirectory = openScreenshotsDirectory;
+window.getScreenshotsDirectory = getScreenshotsDirectory;
 
 function stopCapture() {
     if (screenshotInterval) {
@@ -569,13 +643,6 @@ function stopCapture() {
 
     isScreenCaptureInitialized = false;
     isScreenCaptureInitializing = false;
-
-    // Stop macOS audio capture if running (disabled)
-    if (isMacOS) {
-        // ipcRenderer.invoke('stop-macos-audio').catch(err => {
-        //     console.error('Error stopping macOS audio:', err);
-        // });
-    }
 }
 
 function resetScreenCapture() {
@@ -753,6 +820,10 @@ function initializeCheddar() {
         getAllConversationSessions,
         getConversationSession,
         initConversationStorage,
+        
+        // Screenshot debugging functions
+        openScreenshotsDirectory,
+        getScreenshotsDirectory,
         
         // Content protection function
         getContentProtection: () => {

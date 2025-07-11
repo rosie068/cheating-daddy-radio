@@ -166,6 +166,69 @@ function setupGeneralIpcHandlers() {
         }
     });
 
+    ipcMain.handle('save-screenshot-locally', async (event, { data, filename, metadata }) => {
+        try {
+            // Create screenshots directory if it doesn't exist
+            const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
+            if (!fs.existsSync(screenshotsDir)) {
+                fs.mkdirSync(screenshotsDir, { recursive: true });
+            }
+
+            // Create file path
+            const filePath = path.join(screenshotsDir, filename);
+
+            // Save the image file
+            const imageBuffer = Buffer.from(data, 'base64');
+            fs.writeFileSync(filePath, imageBuffer);
+
+            // Save metadata file
+            const metadataPath = path.join(screenshotsDir, filename.replace('.jpg', '_metadata.json'));
+            fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+
+            console.log('📸 Screenshot saved:', filePath);
+            console.log('📋 Metadata saved:', metadataPath);
+
+            return { 
+                success: true, 
+                path: filePath, 
+                metadataPath: metadataPath,
+                size: imageBuffer.length 
+            };
+        } catch (error) {
+            console.error('Error saving screenshot locally:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('open-screenshots-directory', async (event) => {
+        try {
+            const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
+            
+            // Create directory if it doesn't exist
+            if (!fs.existsSync(screenshotsDir)) {
+                fs.mkdirSync(screenshotsDir, { recursive: true });
+            }
+            
+            // Open the directory in the system file manager
+            await shell.openPath(screenshotsDir);
+            
+            return { success: true, path: screenshotsDir };
+        } catch (error) {
+            console.error('Error opening screenshots directory:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-screenshots-directory', async (event) => {
+        try {
+            const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
+            return { success: true, path: screenshotsDir };
+        } catch (error) {
+            console.error('Error getting screenshots directory path:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
 
 
     // Test IPC handler to verify communication is working
@@ -486,16 +549,28 @@ function setupGeneralIpcHandlers() {
         try {
             const { desktopCapturer } = require('electron');
             
+            console.log('📸 Taking direct screenshot for source:', sourceId);
+            
             // Get the specific source for screenshot
             const sources = await desktopCapturer.getSources({ 
                 types: ['screen', 'window'],
                 thumbnailSize: { width: 1920, height: 1080 } // Full resolution thumbnail
             });
             
+            console.log('🔍 Available sources for screenshot:', sources.map(s => ({ id: s.id, name: s.name })));
+            
             const selectedSource = sources.find(source => source.id === sourceId);
             if (!selectedSource) {
+                console.error(`❌ Source with ID ${sourceId} not found`);
+                console.error('Available sources:', sources.map(s => s.id));
                 throw new Error(`Source with ID ${sourceId} not found`);
             }
+            
+            console.log('✅ Selected source for screenshot:', {
+                id: selectedSource.id,
+                name: selectedSource.name,
+                thumbnailSize: selectedSource.thumbnail ? `${selectedSource.thumbnail.getSize().width}x${selectedSource.thumbnail.getSize().height}` : 'no thumbnail'
+            });
             
             // The thumbnail is already a screenshot at the requested resolution
             const thumbnailDataURL = selectedSource.thumbnail.toDataURL('image/jpeg', 0.9);
@@ -503,14 +578,33 @@ function setupGeneralIpcHandlers() {
             // Extract base64 data from data URL
             const base64Data = thumbnailDataURL.split(',')[1];
             
+            console.log('📊 Screenshot data generated:', {
+                dataLength: base64Data.length,
+                dataSize: `${Math.round(base64Data.length / 1024)}KB`,
+                sourceName: selectedSource.name,
+                timestamp: new Date().toISOString()
+            });
+            
             return { 
                 success: true, 
                 data: base64Data,
-                source: selectedSource.name
+                source: selectedSource.name,
+                metadata: {
+                    sourceId: selectedSource.id,
+                    sourceName: selectedSource.name,
+                    dataLength: base64Data.length,
+                    timestamp: new Date().toISOString()
+                }
             };
             
         } catch (error) {
-            console.error('Error taking direct screenshot:', error);
+            console.error('❌ Error taking direct screenshot:', error);
+            console.error('Error details:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+                timestamp: new Date().toISOString()
+            });
             return { success: false, error: error.message };
         }
     });
