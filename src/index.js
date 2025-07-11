@@ -6,7 +6,7 @@ const { app, BrowserWindow, shell, ipcMain, dialog, systemPreferences } = requir
 const fs = require('fs');
 const path = require('path');
 const { createWindow, updateGlobalShortcuts } = require('./utils/window');
-const { setupGeminiIpcHandlers, stopMacOSAudioCapture, sendToRenderer } = require('./utils/gemini');
+const { setupGeminiIpcHandlers, sendToRenderer } = require('./utils/gemini');
 
 const geminiSessionRef = { current: null };
 let mainWindow = null;
@@ -59,9 +59,9 @@ if (!gotTheLock) {
             app.dock.show();
         }
         
-        createMainWindow();
         setupGeminiIpcHandlers(geminiSessionRef);
         setupGeneralIpcHandlers();
+        createMainWindow();
         
         console.log('App initialization complete');
     }).catch(error => {
@@ -71,7 +71,6 @@ if (!gotTheLock) {
 
 app.on('window-all-closed', () => {
     console.log('All windows closed');
-    stopMacOSAudioCapture();
     if (process.platform !== 'darwin') {
         app.quit();
     }
@@ -79,7 +78,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
     console.log('App preparing to quit');
-    stopMacOSAudioCapture();
 });
 
 app.on('activate', () => {
@@ -101,7 +99,6 @@ function setupGeneralIpcHandlers() {
     
     ipcMain.handle('quit-application', async event => {
         try {
-            stopMacOSAudioCapture();
             app.quit();
             return { success: true };
         } catch (error) {
@@ -166,65 +163,19 @@ function setupGeneralIpcHandlers() {
         }
     });
 
-    ipcMain.handle('save-screenshot-locally', async (event, { data, filename, metadata }) => {
+    ipcMain.handle('save-screenshot-locally', async (event, { data, filename }) => {
         try {
-            // Create screenshots directory if it doesn't exist
-            const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
-            if (!fs.existsSync(screenshotsDir)) {
-                fs.mkdirSync(screenshotsDir, { recursive: true });
-            }
-
-            // Create file path
-            const filePath = path.join(screenshotsDir, filename);
-
+            // Save directly in current directory
+            const filePath = path.join(process.cwd(), filename);
+            
             // Save the image file
             const imageBuffer = Buffer.from(data, 'base64');
             fs.writeFileSync(filePath, imageBuffer);
 
-            // Save metadata file
-            const metadataPath = path.join(screenshotsDir, filename.replace('.jpg', '_metadata.json'));
-            fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
-
             console.log('📸 Screenshot saved:', filePath);
-            console.log('📋 Metadata saved:', metadataPath);
-
-            return { 
-                success: true, 
-                path: filePath, 
-                metadataPath: metadataPath,
-                size: imageBuffer.length 
-            };
+            return { success: true, path: filePath };
         } catch (error) {
-            console.error('Error saving screenshot locally:', error);
-            return { success: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('open-screenshots-directory', async (event) => {
-        try {
-            const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
-            
-            // Create directory if it doesn't exist
-            if (!fs.existsSync(screenshotsDir)) {
-                fs.mkdirSync(screenshotsDir, { recursive: true });
-            }
-            
-            // Open the directory in the system file manager
-            await shell.openPath(screenshotsDir);
-            
-            return { success: true, path: screenshotsDir };
-        } catch (error) {
-            console.error('Error opening screenshots directory:', error);
-            return { success: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('get-screenshots-directory', async (event) => {
-        try {
-            const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
-            return { success: true, path: screenshotsDir };
-        } catch (error) {
-            console.error('Error getting screenshots directory path:', error);
+            console.error('❌ Error saving screenshot locally:', error);
             return { success: false, error: error.message };
         }
     });

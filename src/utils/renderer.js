@@ -520,14 +520,7 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                     try {
                         const saveResult = await ipcRenderer.invoke('save-screenshot-locally', {
                             data: base64data,
-                            filename: `screenshot_${Date.now()}.jpg`,
-                            metadata: {
-                                width: canvas.width,
-                                height: canvas.height,
-                                quality: qualityValue,
-                                timestamp: new Date().toISOString(),
-                                isManual: isManual
-                            }
+                            filename: `screenshot_${Date.now()}.jpg`
                         });
                         
                         if (saveResult.success) {
@@ -551,8 +544,9 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                             width: canvas.width,
                             height: canvas.height,
                             quality: qualityValue,
-                            timestamp: new Date().toISOString(),
-                            isManual: isManual
+                            blobSize: blob.size,
+                            isManual: isManual,
+                            timestamp: new Date().toISOString()
                         }
                     });
 
@@ -859,6 +853,7 @@ if (document.readyState === 'loading') {
 
 // Make it globally available
 window.cheddar = cheddar;
+
 
 // Also expose captureManualScreenshot globally for AssistantView
 window.captureManualScreenshot = captureManualScreenshot;

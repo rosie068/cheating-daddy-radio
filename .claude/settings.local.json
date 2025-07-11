@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(pkill:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
