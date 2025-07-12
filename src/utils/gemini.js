@@ -8,6 +8,19 @@ let currentTranscription = '';
 let conversationHistory = [];
 let isInitializingSession = false;
 
+// Context window tracking variables
+let currentContextHistory = []; // Tracks conversation within current context window
+let isNewContextWindow = true; // Flag to indicate if we're starting a new context
+
+// Token management constants
+const MAX_CHAT_CONTEXT_TOKENS = 3000; // Max tokens for past chat context to balance cost
+
+// Simple token estimation function (rough approximation: 1 token ≈ 4 characters)
+function estimateTokens(text) {
+    if (!text || typeof text !== 'string') return 0;
+    return Math.ceil(text.length / 4);
+}
+
 let messageBuffer = '';
 
 // Reconnection tracking variables
@@ -31,6 +44,8 @@ function initializeNewSession() {
     currentSessionId = Date.now().toString();
     currentTranscription = '';
     conversationHistory = [];
+    currentContextHistory = [];
+    isNewContextWindow = true;
     console.log('New conversation session started:', currentSessionId);
 }
 
@@ -46,6 +61,7 @@ function saveConversationTurn(transcription, aiResponse) {
     };
 
     conversationHistory.push(conversationTurn);
+    currentContextHistory.push(conversationTurn);
     console.log('Saved conversation turn:', conversationTurn);
 
     // Send to renderer to save in IndexedDB
@@ -60,7 +76,114 @@ function getCurrentSessionData() {
     return {
         sessionId: currentSessionId,
         history: conversationHistory,
+        contextHistory: currentContextHistory,
     };
+}
+
+// New function to start a new context window
+function startNewContextWindow() {
+    currentContextHistory = [];
+    isNewContextWindow = true;
+    console.log('New context window started');
+}
+
+// Function to build conversation context for API calls with token limits
+function buildConversationContext(userMessage) {
+    if (isNewContextWindow || currentContextHistory.length === 0) {
+        // For new context windows or first messages, just send the user message
+        return userMessage;
+    }
+    
+    // Find the latest report from the conversation history
+    let latestReport = '';
+    for (let i = currentContextHistory.length - 1; i >= 0; i--) {
+        const response = currentContextHistory[i].ai_response;
+        // Check if this response looks like a report (contains standard report sections)
+        if (response.includes('CLINICAL HISTORY') || response.includes('TECHNIQUE') || response.includes('FINDINGS') || response.includes('IMPRESSION')) {
+            latestReport = response;
+            break;
+        }
+    }
+    
+    if (!latestReport) {
+        // No report found, just send the user message
+        return userMessage;
+    }
+    
+    // Build past chat context with token limits
+    let pastChatContext = '';
+    let currentTokens = 0;
+    
+    // Add recent chat exchanges (excluding the initial image upload)
+    for (let i = currentContextHistory.length - 1; i >= 1; i--) { // Start from 1 to skip initial image upload
+        const turn = currentContextHistory[i];
+        const userInput = turn.transcription;
+        const aiResponse = turn.ai_response;
+        
+        // Skip if this is a report (already included as latestReport)
+        if (aiResponse.includes('CLINICAL HISTORY') || aiResponse.includes('TECHNIQUE') || aiResponse.includes('FINDINGS') || aiResponse.includes('IMPRESSION')) {
+            continue;
+        }
+        
+        const chatEntry = `User: ${userInput}\nAI: ${aiResponse}\n\n`;
+        const entryTokens = estimateTokens(chatEntry);
+        
+        if (currentTokens + entryTokens > MAX_CHAT_CONTEXT_TOKENS) {
+            break; // Stop adding if we exceed token limit
+        }
+        
+        pastChatContext = chatEntry + pastChatContext; // Prepend to maintain chronological order
+        currentTokens += entryTokens;
+    }
+    
+    // Detect if this is a new image analysis request
+    const isNewImageAnalysis = userMessage.includes('Please analyze this NEW medical image') || 
+                              userMessage.includes('generate a comprehensive radiology report');
+    
+    // Build the full context
+    let fullContext = `PREVIOUS REPORT:
+${latestReport}`;
+    
+    if (pastChatContext.trim()) {
+        fullContext += `
+
+PAST CONVERSATION:
+${pastChatContext.trim()}`;
+    }
+    
+    if (isNewImageAnalysis) {
+        fullContext += `
+
+NEW IMAGE ANALYSIS REQUEST:
+${userMessage}
+
+INSTRUCTIONS: A new medical image has been provided. Please analyze this new image and generate a comprehensive radiology report. Use the previous report and conversation history as context for comparison and reference, but focus on analyzing the new image. Generate a complete new report based on the new image findings.
+
+CRITICAL FORMATTING REQUIREMENTS:
+1. Use PLAIN TEXT formatting throughout the entire report - NO markdown, NO bold, NO special formatting
+2. ALL section headers must use identical plain text formatting: CLINICAL HISTORY:, TECHNIQUE:, FINDINGS:, IMPRESSION:, RECOMMENDATIONS:
+3. RECOMMENDATIONS section must use the same plain text formatting as all other sections (no bold, no special styling)
+4. Generate a complete new report based on the new image analysis
+5. Use simple bullet points with dashes (-) where appropriate`;
+    } else {
+        fullContext += `
+
+USER REQUEST:
+${userMessage}
+
+INSTRUCTIONS: Please provide the complete modified report that incorporates the user's request above. Keep all the content from the current report that wasn't specifically requested to be changed. Consider the past conversation context when relevant. Return ONLY the modified report content, not a conversation or explanation.
+
+CRITICAL FORMATTING REQUIREMENTS:
+1. Use PLAIN TEXT formatting throughout the entire report - NO markdown, NO bold, NO special formatting
+2. ALL section headers must use identical plain text formatting: CLINICAL HISTORY:, TECHNIQUE:, FINDINGS:, IMPRESSION:, RECOMMENDATIONS:
+3. RECOMMENDATIONS section must use the same plain text formatting as all other sections (no bold, no special styling)
+4. Maintain the same section structure and order as the current report
+5. Use simple bullet points with dashes (-) where appropriate
+6. Only change what the user specifically requested while preserving the plain text format`;
+    }
+    
+    console.log(`Context built with ${estimateTokens(fullContext)} estimated tokens (${isNewImageAnalysis ? 'NEW IMAGE' : 'MODIFICATION'})`);
+    return fullContext;
 }
 
 async function sendReconnectionContext() {
@@ -242,7 +365,7 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 
 
-    ipcMain.handle('send-image-content', async (event, { data, metadata, debug }) => {
+    ipcMain.handle('send-image-content', async (event, { data, metadata, debug, additionalContext }) => {
         console.log('📸 send-image-content called, geminiSessionRef.current:', geminiSessionRef.current ? 'exists' : 'null');
         if (!geminiSessionRef.current) return { success: false, error: 'No active Gemini session' };
 
@@ -292,11 +415,46 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
 
             // Generate content with the image
             const startTime = Date.now();
-            const result = await geminiSessionRef.current.generateContent([imagePart]);
+            let contentParts = [imagePart];
+            
+            // Build contextual prompt for image analysis
+            let prompt = '';
+            
+            if (isNewContextWindow || currentContextHistory.length === 0) {
+                // First image analysis - use standard prompt
+                prompt = `Please analyze this medical image and generate a comprehensive radiology report. Include clinical findings, anatomical observations, and relevant medical recommendations based on the imaging study presented.`;
+                
+                if (additionalContext && additionalContext.trim()) {
+                    prompt += `
+
+Additional context provided by the user: ${additionalContext.trim()}
+
+Please incorporate this additional information into your analysis and report generation.`;
+                }
+            } else {
+                // Subsequent image analysis - include conversation context like text messages
+                let contextualPrompt = `Please analyze this NEW medical image and generate a comprehensive radiology report.`;
+                
+                if (additionalContext && additionalContext.trim()) {
+                    contextualPrompt = `${additionalContext.trim()}`;
+                }
+                
+                // Use buildConversationContext to include latest report and past conversation
+                prompt = buildConversationContext(contextualPrompt);
+                console.log('Including conversation context with image analysis');
+            }
+            
+            if (prompt) {
+                const textPart = { text: prompt };
+                contentParts.push(textPart);
+                console.log('Adding prompt to image analysis:', prompt.substring(0, 200) + '...');
+            }
+            
+            const result = await geminiSessionRef.current.generateContent(contentParts);
             const response = await result.response;
             const text = response.text();
             const endTime = Date.now();
-
+            
             console.log('✅ Gemini API response received:', {
                 responseTime: `${endTime - startTime}ms`,
                 responseLength: text.length,
@@ -307,12 +465,41 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             // Send the response back to the renderer
             sendToRenderer('update-response', text);
 
-            // Save conversation turn with enhanced metadata
-            const conversationContext = metadata 
-                ? `Image uploaded (${metadata.width}x${metadata.height}, quality: ${metadata.quality}, manual: ${metadata.isManual})`
-                : 'Image uploaded';
+            // Only start new context window if this is the very first image analysis
+            // Otherwise, preserve existing context to maintain conversation history
+            if (isNewContextWindow) {
+                startNewContextWindow();
+                console.log('Started new context window for first image analysis');
+            } else {
+                console.log('Preserving existing context window for continued conversation');
+            }
+
+            // Save conversation turn with enhanced metadata including image description
+            
+            // Extract image description from the AI response
+            let imageDescription = '';
+            const descriptionMatch = text.match(/<!-- IMAGE_DESCRIPTION_START -->(.*?)<!-- IMAGE_DESCRIPTION_END -->/s);
+            if (descriptionMatch) {
+                imageDescription = descriptionMatch[1].trim();
+            }
+            
+            // Build enhanced conversation context with image description
+            let conversationContext = '';
+            if (metadata) {
+                conversationContext = `Image uploaded (${metadata.width}x${metadata.height}, quality: ${metadata.quality}, manual: ${metadata.isManual})`;
+            } else {
+                conversationContext = 'Image uploaded';
+            }
+            
+            // Add image description if available
+            if (imageDescription) {
+                conversationContext += `\nImage Description: ${imageDescription}`;
+            }
             
             saveConversationTurn(conversationContext, text);
+
+            // Mark that we're no longer in a new context window after first interaction
+            isNewContextWindow = false;
 
             return { success: true, responseTime: endTime - startTime };
         } catch (error) {
@@ -337,10 +524,21 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
 
             console.log('Sending text message:', text);
             
-            // Generate content with the text
-            const result = await geminiSessionRef.current.generateContent(text.trim());
+            // Build conversation context for text messages
+            const contextualMessage = buildConversationContext(text.trim());
+            console.log('Contextual message built:', { 
+                originalLength: text.trim().length, 
+                contextualLength: contextualMessage.length,
+                hasContext: currentContextHistory.length > 0
+            });
+            
+            // Generate content with the contextual text
+            const result = await geminiSessionRef.current.generateContent(contextualMessage);
             const response = await result.response;
             const responseText = response.text();
+            
+            // Mark that we're no longer in a new context window after first text interaction
+            isNewContextWindow = false;
 
             // Send the response back to the renderer
             sendToRenderer('update-response', responseText);
@@ -406,6 +604,18 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             return { success: false, error: error.message };
         }
     });
+
+    // Context window management
+    ipcMain.handle('reset-context-window', async () => {
+        try {
+            startNewContextWindow();
+            console.log('Context window reset via IPC');
+            return { success: true };
+        } catch (error) {
+            console.error('Error resetting context window:', error);
+            return { success: false, error: error.message };
+        }
+    });
 }
 
 module.exports = {
@@ -419,4 +629,5 @@ module.exports = {
     sendReconnectionContext,
     setupGeminiIpcHandlers,
     attemptReconnection,
+    startNewContextWindow,
 };

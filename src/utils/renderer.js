@@ -387,7 +387,7 @@ function setupWindowsLoopbackProcessing() {
     audioProcessor.connect(audioContext.destination);
 }
 
-async function captureScreenshot(imageQuality = 'medium', isManual = false) {
+async function captureScreenshot(imageQuality = 'medium', isManual = false, additionalContext = null) {
     console.log(`Capturing ${isManual ? 'manual' : 'automated'} screenshot...`);
     
     // Check rate limiting for automated screenshots only
@@ -516,21 +516,6 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                         timestamp: new Date().toISOString()
                     });
 
-                    // Save screenshot locally for verification
-                    try {
-                        const saveResult = await ipcRenderer.invoke('save-screenshot-locally', {
-                            data: base64data,
-                            filename: `screenshot_${Date.now()}.jpg`
-                        });
-                        
-                        if (saveResult.success) {
-                            console.log('💾 Screenshot saved locally:', saveResult.path);
-                        } else {
-                            console.warn('⚠️ Failed to save screenshot locally:', saveResult.error);
-                        }
-                    } catch (saveError) {
-                        console.warn('⚠️ Error saving screenshot locally:', saveError);
-                    }
 
                     console.log('📤 Sending image to AI...', {
                         dataLength: base64data.length,
@@ -547,7 +532,8 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                             blobSize: blob.size,
                             isManual: isManual,
                             timestamp: new Date().toISOString()
-                        }
+                        },
+                        additionalContext: additionalContext
                     });
 
                     if (result.success) {
@@ -572,19 +558,13 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
     }
 }
 
-async function captureManualScreenshot(imageQuality = null) {
-    console.log('Manual screenshot triggered');
+async function captureManualScreenshot(imageQuality = null, additionalContext = null) {
+    console.log('Manual screenshot triggered with context:', additionalContext);
     
     const quality = imageQuality || currentImageQuality;
     
-    // Only capture screenshot, don't send automatic text message
-    await captureScreenshot(quality, true); // Pass true for isManual
-    
-    // Wait a moment for the screenshot to be processed
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Send a focused message for medical report generation
-    await sendTextMessage(`Please analyze this medical image and generate a comprehensive radiology report. Include clinical findings, anatomical observations, and relevant medical recommendations based on the imaging study presented.`);
+    // Capture screenshot and pass additional context to be included in the image analysis
+    await captureScreenshot(quality, true, additionalContext); // Pass context as third parameter
 }
 
 // Helper function to open screenshots directory

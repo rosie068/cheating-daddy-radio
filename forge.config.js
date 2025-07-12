@@ -4,14 +4,13 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
     packagerConfig: {
         asar: true,
-        extraResource: ['./src/assets/SystemAudioDump'],
         name: 'TriFetch',
         icon: 'src/assets/logo',
         appBundleId: 'com.trifetch.clinical-assistant',
         appCategoryType: 'public.app-category.medical',
         extendInfo: 'Info.plist',
         // Override the default Electron license with our GPL-3.0 license
-        afterCopy: [(buildPath, electronVersion, platform, arch, callback) => {
+        afterCopy: [(buildPath, _electronVersion, _platform, _arch, callback) => {
             const fs = require('fs');
             const path = require('path');
             const projectLicense = path.join(__dirname, 'LICENSE');
@@ -56,14 +55,28 @@ module.exports = {
             name: '@electron-forge/maker-zip',
             platforms: ['darwin'],
         },
+        // DMG maker disabled due to Apple Silicon compatibility issues
+        // {
+        //     name: '@electron-forge/maker-dmg',
+        //     config: {
+        //         name: 'TriFetch',
+        //         title: 'TriFetch v0.4.0'
+        //     }
+        // },
         {
-            name: '@electron-forge/maker-deb',
-            config: {},
+            name: '@electron-forge/maker-zip',
+            platforms: ['linux'],
         },
-        {
-            name: '@electron-forge/maker-rpm',
-            config: {},
-        },
+        // DEB maker requires dpkg and fakeroot which aren't available on macOS
+        // {
+        //     name: '@electron-forge/maker-deb',
+        //     config: {},
+        // },
+        // RPM maker requires rpmbuild which isn't available on macOS  
+        // {
+        //     name: '@electron-forge/maker-rpm',
+        //     config: {},
+        // },
     ],
     plugins: [
         {

@@ -4,7 +4,6 @@ if (require('electron-squirrel-startup')) {
 
 const { app, BrowserWindow, shell, ipcMain, dialog, systemPreferences } = require('electron');
 const fs = require('fs');
-const path = require('path');
 const { createWindow, updateGlobalShortcuts } = require('./utils/window');
 const { setupGeminiIpcHandlers, sendToRenderer } = require('./utils/gemini');
 
@@ -163,22 +162,6 @@ function setupGeneralIpcHandlers() {
         }
     });
 
-    ipcMain.handle('save-screenshot-locally', async (event, { data, filename }) => {
-        try {
-            // Save directly in current directory
-            const filePath = path.join(process.cwd(), filename);
-            
-            // Save the image file
-            const imageBuffer = Buffer.from(data, 'base64');
-            fs.writeFileSync(filePath, imageBuffer);
-
-            console.log('📸 Screenshot saved:', filePath);
-            return { success: true, path: filePath };
-        } catch (error) {
-            console.error('❌ Error saving screenshot locally:', error);
-            return { success: false, error: error.message };
-        }
-    });
 
 
 

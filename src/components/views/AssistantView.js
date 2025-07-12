@@ -332,7 +332,7 @@ export class AssistantView extends LitElement {
         const profileNames = this.getProfileNames();
         return this.responses.length > 0 && this.currentResponseIndex >= 0
             ? this.responses[this.currentResponseIndex]
-            : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}. Please provide me with any relevant clinical information, and click on Generate Report for me to view the current image and automate a report for your review. Once you are happy with the report, you can export it to a text file using Export Report.`;
+            : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}. Please provide me with any relevant clinical information, and click on Generate Report for me to view the current image and automate a new report for your review. For modification, simply type in the chat box and hit return to make modidifications to the existing report. Once you are happy with the report, you can export it to a text file using Export Report.`;
     }
 
     renderMarkdown(content) {
@@ -473,11 +473,19 @@ export class AssistantView extends LitElement {
         if (textInput && textInput.value.trim()) {
             const message = textInput.value.trim();
             textInput.value = ''; // Clear input
-            await this.onSendText(message);
+            
+            // Call handleGenerateReport with the text input as context
+            // This ensures every API call includes screenshot + user input + previous context
+            await this.handleGenerateReportWithContext(message);
         }
     }
 
     async handleGenerateReport() {
+        // Call the main method without additional context from input
+        await this.handleGenerateReportWithContext();
+    }
+
+    async handleGenerateReportWithContext(userContext = null) {
         // Prevent multiple simultaneous Generate Report calls
         if (this._isGeneratingReport) {
             console.log('Generate Report already in progress, skipping...');
@@ -543,14 +551,50 @@ export class AssistantView extends LitElement {
                 return;
             }
             
+            // Use provided context or check for text input in the chat box
+            let additionalContext = userContext;
+            if (!additionalContext) {
+                const textInput = this.shadowRoot.querySelector('#textInput');
+                additionalContext = textInput && textInput.value.trim() ? textInput.value.trim() : null;
+                
+                if (additionalContext) {
+                    console.log('Including additional context from chat input:', additionalContext);
+                    // Clear the input after capturing it
+                    textInput.value = '';
+                }
+            } else {
+                console.log('Using provided user context:', additionalContext);
+            }
+            
             // Use the existing manual screenshot function
             if (window.captureManualScreenshot) {
                 console.log('Capturing screen for report generation...');
-                await window.captureManualScreenshot('high');
+                await window.captureManualScreenshot('high', additionalContext);
                 console.log('Screen captured and sent to API for analysis');
             } else if (window.cheddar && window.cheddar.captureScreenshot) {
                 console.log('Using cheddar.captureScreenshot...');
                 await window.cheddar.captureScreenshot('high', true);
+                
+                // Wait a moment for the screenshot to be processed
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Send text message with additional context if provided
+                let prompt = `Please analyze this medical image and generate a comprehensive radiology report. Include clinical findings, anatomical observations, and relevant medical recommendations based on the imaging study presented.`;
+                
+                if (additionalContext) {
+                    prompt = `Please analyze this medical image and generate a comprehensive radiology report. Include clinical findings, anatomical observations, and relevant medical recommendations based on the imaging study presented.
+
+Additional context provided by the user: ${additionalContext}
+
+Please incorporate this additional information into your analysis and report generation.`;
+                    console.log('Including additional context in fallback report generation:', additionalContext);
+                }
+                
+                // Send the text message for analysis
+                if (window.cheddar && window.cheddar.sendTextMessage) {
+                    await window.cheddar.sendTextMessage(prompt);
+                }
+                
                 console.log('Screen captured and sent to API for analysis');
             } else {
                 console.warn('Screen capture function not available');
@@ -584,8 +628,20 @@ export class AssistantView extends LitElement {
             return;
         }
 
-        // Create a clean text version by removing HTML tags if present
-        const cleanText = currentResponse.replace(/<[^>]*>/g, '');
+        // Create a clean text version by removing HTML tags and hidden image descriptions
+        let cleanText = currentResponse.replace(/<[^>]*>/g, '');
+        
+        // Remove hidden image description markers and content
+        cleanText = cleanText.replace(/<!-- IMAGE_DESCRIPTION_START -->.*?<!-- IMAGE_DESCRIPTION_END -->/gs, '').trim();
+        
+        // Extract only the report content starting from CLINICAL HISTORY
+        const clinicalHistoryIndex = cleanText.search(/CLINICAL HISTORY/i);
+        if (clinicalHistoryIndex !== -1) {
+            cleanText = cleanText.substring(clinicalHistoryIndex);
+        }
+        
+        // Clean up any extra whitespace
+        cleanText = cleanText.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
         
         // Generate timestamp for filename
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -601,6 +657,14 @@ export class AssistantView extends LitElement {
                 
                 if (result.success) {
                     console.log('Report exported successfully:', result.path);
+                    
+                    // Reset context window after export
+                    try {
+                        await ipcRenderer.invoke('reset-context-window');
+                        console.log('Context window reset after export');
+                    } catch (contextError) {
+                        console.error('Error resetting context window:', contextError);
+                    }
                 } else {
                     console.error('Failed to export report:', result.error);
                 }
@@ -655,7 +719,6 @@ export class AssistantView extends LitElement {
     }
 
     render() {
-        const currentResponse = this.getCurrentResponse();
         const responseCounter = this.getResponseCounter();
 
         return html`
