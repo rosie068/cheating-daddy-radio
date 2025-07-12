@@ -3,7 +3,9 @@
     "allow": [
       "Bash(pkill:*)",
       "Bash(npm start)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

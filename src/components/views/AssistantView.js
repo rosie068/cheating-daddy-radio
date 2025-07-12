@@ -335,7 +335,66 @@ export class AssistantView extends LitElement {
             : `Welcome, Doctor! I am here to help you with your ${profileNames[this.selectedProfile] || 'session'}. Please provide me with any relevant clinical information, and click on Generate Report for me to view the current image and automate a new report for your review. For modification, simply type in the chat box and hit return to make modidifications to the existing report. Once you are happy with the report, you can export it to a text file using Export Report.`;
     }
 
+    postProcessResponse(content) {
+        // Post-process AI response to ensure consistent plain text formatting across all sections
+        if (!content || typeof content !== 'string') {
+            return content;
+        }
+
+        console.log('Post-processing response for consistent formatting');
+        console.log('Original content length:', content.length);
+        
+        // First, remove any hidden image description markers
+        let processedContent = content.replace(/<!-- IMAGE_DESCRIPTION_START -->.*?<!-- IMAGE_DESCRIPTION_END -->/gs, '').trim();
+        
+        // Define standard radiology report sections and other common headers
+        const sections = ['CLINICAL HISTORY', 'TECHNIQUE', 'FINDINGS', 'IMPRESSION', 'RECOMMENDATIONS', 'DISCLAIMER'];
+        
+        // Normalize section headers to plain text format with consistent colons
+        sections.forEach(section => {
+            // Match various formats: **SECTION:**, SECTION:, **SECTION**, etc.
+            const sectionRegex = new RegExp(`\\*\\*${section}\\*\\*:?|\\*${section}\\*:?|${section}:?`, 'gi');
+            processedContent = processedContent.replace(sectionRegex, `${section}:`);
+        });
+        
+        // More aggressive bold formatting removal - handle all variations
+        // Remove **text** (standard markdown bold)
+        processedContent = processedContent.replace(/\*\*(.*?)\*\*/gs, '$1');
+        // Remove __text__ (alternative markdown bold)
+        processedContent = processedContent.replace(/__(.*?)__/gs, '$1');
+        // Remove standalone ** that might remain
+        processedContent = processedContent.replace(/\*\*/g, '');
+        
+        // More aggressive italic formatting removal
+        // Be careful not to remove dashes that are used for bullet points
+        processedContent = processedContent.replace(/(?<!^[\s]*)\*([^*\n]+)\*/gm, '$1');
+        processedContent = processedContent.replace(/(?<!^[\s]*)_([^_\n]+)_/gm, '$1');
+        
+        // Normalize bullet points to simple dashes - handle multiple formats
+        processedContent = processedContent.replace(/^[\s]*[•·▪▫‣⁃]\s*/gm, '- ');
+        processedContent = processedContent.replace(/^[\s]*[\*\+]\s+/gm, '- ');
+        
+        // Remove any remaining markdown symbols that might cause formatting inconsistencies
+        processedContent = processedContent.replace(/[`~]/g, '');
+        
+        // Remove any stray asterisks or underscores that aren't part of bullet points
+        processedContent = processedContent.replace(/(?<!^[\s]*)\*/g, '');
+        processedContent = processedContent.replace(/(?<!^[\s]*)_(?![\s])/g, '');
+        
+        // Clean up excessive whitespace while preserving structure
+        processedContent = processedContent.replace(/\n\s*\n\s*\n/g, '\n\n');
+        processedContent = processedContent.trim();
+        
+        console.log('Post-processing complete - all sections normalized to plain text');
+        console.log('Processed content length:', processedContent.length);
+        console.log('Sample of processed content:', processedContent.substring(0, 500));
+        return processedContent;
+    }
+
     renderMarkdown(content) {
+        // First apply post-processing to ensure consistent formatting
+        const processedContent = this.postProcessResponse(content);
+        
         // Check if marked is available
         if (typeof window !== 'undefined' && window.marked) {
             try {
@@ -345,16 +404,16 @@ export class AssistantView extends LitElement {
                     gfm: true,
                     sanitize: false, // We trust the AI responses
                 });
-                const rendered = window.marked.parse(content);
+                const rendered = window.marked.parse(processedContent);
                 console.log('Markdown rendered successfully');
                 return rendered;
             } catch (error) {
                 console.warn('Error parsing markdown:', error);
-                return content; // Fallback to plain text
+                return processedContent; // Fallback to post-processed plain text
             }
         }
-        console.log('Marked not available, using plain text');
-        return content; // Fallback if marked is not available
+        console.log('Marked not available, using post-processed plain text');
+        return processedContent; // Fallback to post-processed content
     }
 
     getResponseCounter() {
@@ -628,11 +687,11 @@ Please incorporate this additional information into your analysis and report gen
             return;
         }
 
-        // Create a clean text version by removing HTML tags and hidden image descriptions
-        let cleanText = currentResponse.replace(/<[^>]*>/g, '');
+        // Apply post-processing to ensure consistent formatting before export
+        let cleanText = this.postProcessResponse(currentResponse);
         
-        // Remove hidden image description markers and content
-        cleanText = cleanText.replace(/<!-- IMAGE_DESCRIPTION_START -->.*?<!-- IMAGE_DESCRIPTION_END -->/gs, '').trim();
+        // Remove any remaining HTML tags
+        cleanText = cleanText.replace(/<[^>]*>/g, '');
         
         // Extract only the report content starting from CLINICAL HISTORY
         const clinicalHistoryIndex = cleanText.search(/CLINICAL HISTORY/i);
@@ -640,7 +699,7 @@ Please incorporate this additional information into your analysis and report gen
             cleanText = cleanText.substring(clinicalHistoryIndex);
         }
         
-        // Clean up any extra whitespace
+        // Final cleanup of any extra whitespace
         cleanText = cleanText.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
         
         // Generate timestamp for filename
